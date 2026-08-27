@@ -14,8 +14,10 @@ import ErrorNotice from "../../components/ErrorNotice";
 import LineFilter from "../../components/LineFilter";   // FASE L
 import PaginationBar from "../../components/PaginationBar";
 import { usePagedList } from "../../hooks/usePagedList";
-import { CheckCircle2, Loader2, Plus, RotateCcw, Search, X, AlertCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Plus, RotateCcw, Search, X, AlertCircle, ArrowRight, Map } from "lucide-react";
 import { ReturnStatusPill, ReturnTypeBadge, fmtDate } from "./ReturnShared";
+import { formatCurrency } from "../../utils/formatters";
+import { resolveDeepLinkTarget } from "../../config/navigationConfig";
 import ReturnDetail from "./ReturnDetail";
 import CreateReturnForm from "./CreateReturnForm";
 import FormModal from "../../components/FormModal";
@@ -40,6 +42,7 @@ const CSV_COLUMNS = [
 // ─── Main component ─────────────────────────────────────────────────────────
 export default function SalesReturns({ currentUser, onNavigate }) {
   const [filterStatus, setFilterStatus] = useState("all");
+  const [returnType, setReturnType]   = useState("all");   // UI/UX 2026-06 — saring per tipe
   const [search, setSearch]         = useState("");
   const [selected, setSelected]     = useState(null);  // detail panel
   const [showCreate, setShowCreate] = useState(false);
@@ -56,7 +59,9 @@ export default function SalesReturns({ currentUser, onNavigate }) {
   const [lineFilter, setLineFilter] = useState("");   // FASE L
   const params = useMemo(
     () => ({ ...(filterStatus === "all" ? {} : { status: filterStatus }),
-             ...(lineFilter ? { line: lineFilter } : {}) }), [filterStatus, lineFilter]);
+             ...(returnType === "all" ? {} : { return_type: returnType }),
+             ...(lineFilter ? { line: lineFilter } : {}) }),
+    [filterStatus, returnType, lineFilter]);
   const paged = usePagedList("/sales-returns", { params, search, pageSize: 20 });
   const returns = paged.items;
   const loading = paged.loading;
@@ -269,6 +274,18 @@ export default function SalesReturns({ currentUser, onNavigate }) {
         <ErrorNotice message={paged.error} onRetry={paged.refresh} testId="return-list-error" />
       )}
 
+      {/* PETA RETUR (anti-dualisme, 2026-06) — di sistem ini ada TIGA jalur retur
+          yang berbeda dokumen & muaranya; layar ini KHUSUS retur jual. Disebut
+          eksplisit beserta jalannya supaya orang tidak mencatat retur beli di sini. */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-[#E4E9F2] bg-[#F8FAFD] px-3 py-2 text-[11.5px] text-[#3A3A3C]"
+        data-testid="return-map-strip">
+        <Map size={13} className="shrink-0 text-[#0058CC]" />
+        <span><b>Layar ini = Retur JUAL</b> (barang kembali dari pelanggan → muaranya Nota Kredit).</span>
+        <MapLink view="purchase-returns" label="Retur Beli ke supplier" role={currentUser?.role} onNavigate={onNavigate} />
+        <MapLink view="interco-transactions" label="Retur antar-PT" role={currentUser?.role} onNavigate={onNavigate} />
+        <MapLink view="return-policies" label="Kebijakan / jendela retur" role={currentUser?.role} onNavigate={onNavigate} />
+      </div>
+
       {/* Filters */}
       <LineFilter value={lineFilter} onChange={setLineFilter} storageKey="sales-returns"
                   allowed={currentUser?.allowed_line_codes} className="mb-2"
@@ -284,13 +301,25 @@ export default function SalesReturns({ currentUser, onNavigate }) {
           />
         </div>
         <div className="tab-pills" data-testid="return-status-filter">
+          {/* ALUR (urutan proses) — lalu HASIL AKHIR. Dikelompokkan supaya terbaca
+              sebagai pipeline, bukan sebelas pil acak. */}
           {[
             ["all",             "Semua"],
-            ["draft",           "Draft"],
-            ["pending_approval","Menunggu"],
-            ["approved",        "Disetujui"],
-            ["inspecting",      "Inspeksi"],
-            ["inspected",       "Selesai Inspeksi"],
+            ["draft",           "1 · Draf"],
+            ["pending_approval","2 · Menunggu ACC"],
+            ["approved",        "3 · Disetujui"],
+            ["inspecting",      "4 · Inspeksi"],
+            ["inspected",       "5 · Siap Diselesaikan"],
+          ].map(([v, l]) => (
+            <button
+              key={v}
+              data-testid={`filter-${v}`}
+              className={filterStatus === v ? "tab-pill active" : "tab-pill"}
+              onClick={() => setFilterStatus(v)}
+            >{l}{counts[v] ? ` (${counts[v]})` : (v === "all" && counts.all ? ` (${counts.all})` : "")}</button>
+          ))}
+          <span className="mx-1 self-center text-[10px] font-bold uppercase text-[#9A9BA3]">Hasil:</span>
+          {[
             ["refund_settled",  "Refund"],
             ["credit_settled",  "Store Credit"],
             ["nego_settled",    "Nego"],
@@ -301,9 +330,22 @@ export default function SalesReturns({ currentUser, onNavigate }) {
               data-testid={`filter-${v}`}
               className={filterStatus === v ? "tab-pill active" : "tab-pill"}
               onClick={() => setFilterStatus(v)}
-            >{l}{counts[v] ? ` (${counts[v]})` : (v === "all" && counts.all ? ` (${counts.all})` : "")}</button>
+            >{l}{counts[v] ? ` (${counts[v]})` : ""}</button>
           ))}
         </div>
+      </div>
+      {/* Saring per TIPE retur — lima jenis dengan aturan berbeda (retur biasa, barang
+          sisa, penggantian, komplain, garansi); dulu tak bisa disaring sama sekali. */}
+      <div className="tab-pills" style={{ marginBottom: 16 }} data-testid="return-type-filter">
+        <span className="self-center text-[10px] font-bold uppercase text-[#9A9BA3]">Tipe:</span>
+        {[
+          ["all", "Semua Tipe"], ["retur", "Retur"], ["bs", "Barang Sisa (BS)"],
+          ["penggantian", "Penggantian"], ["komplain", "Komplain"], ["garansi", "Garansi"],
+        ].map(([v, l]) => (
+          <button key={v} data-testid={`filter-type-${v}`}
+            className={returnType === v ? "tab-pill active" : "tab-pill"}
+            onClick={() => setReturnType(v)}>{l}</button>
+        ))}
       </div>
 
       {/* Table */}
@@ -322,7 +364,7 @@ export default function SalesReturns({ currentUser, onNavigate }) {
         </div>
       ) : (
         <div className="table-wrap" data-testid="returns-table">
-          <table className="data-table">
+          <table className="data-table" style={{ minWidth: 1120 }}>
             <thead>
               <tr>
                 <th>Nomor</th>
@@ -331,20 +373,28 @@ export default function SalesReturns({ currentUser, onNavigate }) {
                 <th>Tipe</th>
                 <th>Status</th>
                 <th>Items</th>
+                <th>Nilai (CN)</th>
                 <th>Nota Kredit</th>
+                <th>Umur</th>
                 <th>Dibuat</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(r => (
-                <tr key={r.id} data-testid={`return-row-${r.id}`}>
+                <tr key={r.id} data-testid={`return-row-${r.id}`}
+                  className="cursor-pointer" onClick={() => setSelected(r)}>
                   <td><strong>{r.number}</strong></td>
                   <td className="font-mono text-sm">{r.order_number}</td>
                   <td>{r.customer_name || "-"}</td>
                   <td><ReturnTypeBadge type={r.return_type} /></td>
                   <td><ReturnStatusPill status={r.status} /></td>
                   <td>{r.items?.length || 0} item</td>
+                  <td className="tabular-nums">
+                    {r.credit_note_amount
+                      ? <strong>{formatCurrency(r.credit_note_amount)}</strong>
+                      : <span className="text-muted text-sm" title="Nilai resmi terbit bersama Nota Kredit saat retur diselesaikan">—</span>}
+                  </td>
                   <td>
                     {r.credit_note_number ? (
                       <span className="feature-badge badge-green" data-testid={`return-cn-${r.id}`}>
@@ -354,12 +404,13 @@ export default function SalesReturns({ currentUser, onNavigate }) {
                       <span className="text-muted text-sm">—</span>
                     )}
                   </td>
+                  <td><AgeCell r={r} /></td>
                   <td className="text-muted">{fmtDate(r.created_at)}</td>
                   <td>
                     <button
                       data-testid={`view-return-${r.id}`}
                       className="link-button"
-                      onClick={() => setSelected(r)}
+                      onClick={(e) => { e.stopPropagation(); setSelected(r); }}
                     >Detail</button>
                   </td>
                 </tr>
@@ -368,8 +419,7 @@ export default function SalesReturns({ currentUser, onNavigate }) {
           </table>
         </div>
       )}
-      {/* P2 — kontrol halaman: daftar retur bisa panjang (satu retur per komplain). */}
-      {!loading && filtered.length > 0 && (
+      {/* P2 — kontrol halaman: daftar retur bisa panjang (satu retur per komplain). */}      {!loading && filtered.length > 0 && (
         <div style={{ marginTop: 10 }}>
           <PaginationBar
             page={paged.page} pageSize={paged.pageSize} total={paged.total}
@@ -382,5 +432,35 @@ export default function SalesReturns({ currentUser, onNavigate }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Tautan peta retur — hanya hidup bila layar tujuannya memang wilayah peran ini. */
+function MapLink({ view, label, role, onNavigate }) {
+  const target = resolveDeepLinkTarget(view, role);
+  return (
+    <button type="button" data-testid={`return-map-${view}`}
+      disabled={!target}
+      title={target ? `Buka ${label}` : "Layar ini bukan wilayah peran Anda"}
+      onClick={() => target && onNavigate?.(target.navId, target.view, target.tab)}
+      className={`inline-flex items-center gap-1 font-bold ${
+        target ? "text-[#0058CC] hover:underline" : "cursor-not-allowed text-[#9A9BA3]"}`}>
+      {label} <ArrowRight size={11} />
+    </button>
+  );
+}
+
+const TERMINAL_ST = ["refund_settled", "credit_settled", "nego_settled", "rejected", "cancelled"];
+
+/** Umur dokumen retur yang masih berjalan — retur menua = uang pelanggan menggantung. */
+function AgeCell({ r }) {
+  if (TERMINAL_ST.includes(r.status)) return <span className="text-muted text-sm">selesai</span>;
+  const days = Math.max(0, Math.floor((Date.now() - new Date(r.created_at).getTime()) / 86400000));
+  const cls = days >= 7 ? "bg-[#FFE5E5] text-[#C62828]"
+    : days >= 3 ? "bg-[#FFF1DB] text-[#B26A00]" : "bg-[#EFF3FB] text-[#33538B]";
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold tabular-nums ${cls}`}>
+      {days === 0 ? "hari ini" : `${days} hari`}
+    </span>
   );
 }

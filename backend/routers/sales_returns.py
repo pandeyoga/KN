@@ -171,6 +171,30 @@ async def get_return(return_id: str, request: Request) -> Dict[str, Any]:
     doc.pop("_id", None)
     assert_entity_access(doc, "sales_returns", ctx)
     doc["attachments"] = [a for a in (doc.get("attachments") or []) if not a.get("is_deleted")]
+    # UI/UX 2026-06 — NILAI per item untuk layar detail: harga diambil dari SO sumber.
+    # SETELAH settle angka resminya adalah Nota Kredit; sebelum itu ini ESTIMASI
+    # (dan diberi label demikian di layar) supaya pemutus tahu berapa rupiah yang
+    # sedang dipertaruhkan sebelum menyetujui/menolak.
+    try:
+        order = await db.sales_orders.find_one(
+            {"id": doc.get("order_id")},
+            {"_id": 0, "items": 1, "grand_total": 1, "status": 1})
+        price_by = {}
+        for it in (order or {}).get("items", []):
+            price_by[it.get("product_id")] = float(it.get("price", it.get("unit_price", 0)) or 0)
+        est = 0.0
+        for it in doc.get("items", []):
+            up = price_by.get(it.get("product_id"), 0.0)
+            line = round(float(it.get("quantity_returned", 0) or 0) * up, 2)
+            it["unit_price_est"] = up
+            it["line_total_est"] = line
+            est += line
+        doc["estimated_value"] = round(est, 2)
+        if order:
+            doc["order_status"] = order.get("status")
+            doc["order_grand_total"] = order.get("grand_total")
+    except Exception:
+        pass
     return doc
 
 

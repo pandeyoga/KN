@@ -47,6 +47,7 @@ export default function WaitingBoardsStrip({
         const look = boardLook(b.key);
         return (
           <WaitingQueueBoard key={b.key} board={b} loading={loading && !data}
+            entityId={entityId}
             unreadable={unreadable} onRetry={load}
             /* T6 DIBAYAR (2026-06c): sesudah keputusan, BUKAN hanya papan ini yang
                harus segar — daftar di bawahnya (tab Transfer, antrean Meja Finance)

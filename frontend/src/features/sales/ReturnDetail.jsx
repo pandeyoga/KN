@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { ReturnTypeBadge, ReturnStatusPill, OUTCOME_LABEL, fmtNum, fmtDate } from "./ReturnShared";
 import ReturnTimeline from "../../components/ReturnTimeline";
+import ReturnStepper from "./ReturnStepper";           // UI/UX 2026-06 — peta alur + langkah berikutnya
 import ReturnInspectPanel from "./ReturnInspectPanel";
 import ReturnSettleModal from "./ReturnSettleModal";
 import ReturnQuarantinePanel from "./ReturnQuarantinePanel";
@@ -31,12 +32,29 @@ export default function ReturnDetail({
   const [uploading, setUploading]             = useState(false);
   const [localError, setLocalError]           = useState(null);
   const [creditNote, setCreditNote]           = useState(null);
+  // UI/UX 2026-06 — versi detail dari server membawa NILAI per item
+  // (`unit_price_est`/`line_total_est` dari harga SO) + `estimated_value`.
+  const [enriched, setEnriched]               = useState(null);
   const fileRef = useRef(null);
   const isTerminal = TERMINAL.includes(ret.status);
   const canReject = ["pending_approval", "approved", "inspecting", "inspected"].includes(ret.status);
   const isSettled = ["refund_settled", "credit_settled", "nego_settled"].includes(ret.status);
 
   // F3 — ambil detail Nota Kredit bila retur sudah menghasilkan credit note.
+  useEffect(() => {
+    let active = true;
+    async function loadEnriched() {
+      try {
+        const res = await axios.get(`${API}/sales-returns/${ret.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (active) setEnriched(res.data);
+      } catch (_) { /* estimasi nilai opsional — layar tetap terbaca */ }
+    }
+    loadEnriched();
+    return () => { active = false; };
+  }, [ret?.id, ret?.status, token]);
+
   useEffect(() => {
     let active = true;
     async function loadCN() {
@@ -192,6 +210,9 @@ export default function ReturnDetail({
         number={ret.number} label="Nota Retur Jual" esignable={false} currentUser={currentUser}
         className="mb-3 rounded-lg border border-[#EDEEF1] bg-[#FAFBFC] px-2.5 py-2" />
 
+      {/* UI/UX 2026-06 — SEDANG DI MANA dokumen ini & APA langkah berikutnya. */}
+      <ReturnStepper status={ret.status} />
+
       {/* FASE I.F — sebab keluhan (master) + perjalanan retur (lembar pemilik).
           Ditaruh SEBELUM panel inspeksi 4-point karena itulah urutan kerjanya:
           keluhan dicatat → barang berjalan → baru diperiksa. */}
@@ -204,12 +225,13 @@ export default function ReturnDetail({
       <div className="detail-grid-2col">
         <div className="section-card">
           <div className="section-header"><Package size={14} /> Item yang Diretur</div>
-          <table className="data-table">
+          <div className="overflow-x-auto">
+          <table className="data-table" style={{ minWidth: 720 }}>
             <thead>
-              <tr><th>Produk</th><th>Qty</th><th>Sat.</th><th>Kondisi</th><th>Alasan</th></tr>
+              <tr><th>Produk</th><th>Qty</th><th>Sat.</th><th>Kondisi</th><th>Alasan</th><th className="text-right">Harga</th><th className="text-right">Nilai</th></tr>
             </thead>
             <tbody>
-              {(ret.items || []).map((item, i) => (
+              {((enriched?.items?.length ? enriched.items : ret.items) || []).map((item, i) => (
                 <tr key={i}>
                   <td>
                     <div className="font-medium">{item.product_name || item.product_id}</div>
@@ -223,10 +245,28 @@ export default function ReturnDetail({
                     </span>
                   </td>
                   <td className="text-muted text-sm">{item.reason || "-"}</td>
+                  <td className="text-right tabular-nums">
+                    {item.unit_price_est != null ? `Rp ${fmtNum(item.unit_price_est, 0)}` : "—"}
+                  </td>
+                  <td className="text-right tabular-nums font-semibold">
+                    {item.line_total_est != null ? `Rp ${fmtNum(item.line_total_est, 0)}` : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
+            {enriched?.estimated_value != null && (
+              <tfoot>
+                <tr data-testid="return-estimated-value">
+                  <td colSpan={6} className="text-right text-sm font-semibold">Estimasi nilai retur</td>
+                  <td className="text-right tabular-nums font-bold">Rp {fmtNum(enriched.estimated_value, 0)}</td>
+                </tr>
+              </tfoot>
+            )}
           </table>
+          </div>
+          <div className="section-notes text-muted">
+            Harga diambil dari SO sumber — <b>estimasi</b>; angka resmi mengikuti Nota Kredit saat retur diselesaikan.
+          </div>
           {ret.notes && <div className="section-notes"><strong>Catatan:</strong> {ret.notes}</div>}
         </div>
 

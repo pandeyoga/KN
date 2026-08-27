@@ -12,7 +12,7 @@
  * jadi mustahil berselisih dengan antrean di layar yang sama (INV-HOME-01).
  */
 import { RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import SeeAllModal, { SeeAllFooter } from "./SeeAllModal";
 import axios, { API } from "../services/apiClient";
 import { askConfirm, askReason } from "../services/confirmService";
@@ -40,7 +40,7 @@ export default function WaitingQueueBoard({
   board = {}, loading = false, unreadable = false, onRetry, onNavigate,
   showEntity = false, icon: Icon, accent = "#6C3FD1", title,
   testIdBase, rowTestIdBase, gotoLabel = "Buka layarnya →", emptyText, gotoTestId,
-  onActed,
+  onActed, entityId = "all",
 }) {
   const rows = board.rows || [];
   const go = () => { if (board.view && onNavigate) onNavigate(board.view); };
@@ -51,6 +51,34 @@ export default function WaitingQueueBoard({
   // selebihnya lewat pop-up "Lihat semua" supaya papan tidak memanjang ke bawah.
   const [showAll, setShowAll] = useState(false);
   const visible = rows.slice(0, 5);
+  /**
+   * MUAT SISA BARIS (2026-06) — papan hanya membawa cuplikan dari server
+   * (`truncated`). Saat pop-up dibuka, sisa dokumen diambil sendiri dari
+   * `GET /approvals/queue-board/{key}` (definisi antrean yang SAMA, INV-HOME-01)
+   * supaya "Lihat semua" benar-benar berarti semuanya — lengkap dengan tombol
+   * keputusan per baris sesuai izin peran.
+   */
+  const [fullRows, setFullRows] = useState(null);
+  const [fullLoading, setFullLoading] = useState(false);
+  const [fullError, setFullError] = useState("");
+  useEffect(() => { setFullRows(null); }, [board]);
+
+  async function fetchAllRows() {
+    setFullLoading(true); setFullError("");
+    try {
+      const params = { limit: 300 };
+      if (entityId && entityId !== "all") params.entity_id = entityId;
+      const res = await axios.get(`${API}/approvals/queue-board/${board.key}`, { params });
+      setFullRows(res.data?.rows || []);
+    } catch (e) {
+      setFullError("Gagal memuat baris lainnya — menampilkan yang sudah dimuat.");
+    } finally { setFullLoading(false); }
+  }
+
+  function openSeeAll() {
+    setShowAll(true);
+    if (board.truncated && board.key && !fullRows && !fullLoading) fetchAllRows();
+  }
 
   /**
    * PAPAN BISA DITINDAK (2026-06) — keputusan selesai TANPA pindah layar.
@@ -104,6 +132,7 @@ export default function WaitingQueueBoard({
       if (a.note_field && note) body[a.note_field] = note;
       await axios.post(`${API}${a.path}`, body);
       notifySuccess(`${a.label}: ${row.number}`, "Papan diperbarui.");
+      if (fullRows) fetchAllRows();          // pop-up "Lihat semua" ikut segar
       if (onActed) await onActed();
       else if (onRetry) await onRetry();
     } catch (e) {
@@ -206,7 +235,7 @@ export default function WaitingQueueBoard({
           {/* Angka di judul tidak boleh lebih besar dari daftar di layar yang sama
               TANPA satu pun tanda (B2): kartu = cuplikan 5 teratas, pop-up = semuanya. */}
           <SeeAllFooter shown={visible.length} total={board.count ?? rows.length}
-            label="dokumen" onClick={() => setShowAll(true)}
+            label="dokumen" onClick={openSeeAll}
             testId={`${testIdBase}-see-all`}
             className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed bg-white/60 px-3 py-2 text-[11.5px] font-semibold transition-colors hover:bg-white"
             style={{ color: accent, borderColor: `${accent}55` }} />
@@ -214,20 +243,26 @@ export default function WaitingQueueBoard({
       )}
 
       <SeeAllModal open={showAll} onClose={() => setShowAll(false)}
-        title={judul} icon={Icon} accent={accent} rows={rows}
+        title={judul} icon={Icon} accent={accent} rows={fullRows ?? rows}
         subtitle="Terurut dari yang paling lama menunggu"
         rowText={(r) => `${r.number || ""} ${r.title || ""} ${r.note || ""}`}
         renderRow={(r) => renderRow(r, `${rowTestIdBase}-modal`)}
         listClassName="grid gap-1.5 p-3"
         testId={`${testIdBase}-see-all-modal`}
-        footerNote={board.truncated ? (
-          /* Kejujuran pemotongan SERVER (`shown`/`hidden`) tetap tampil — pop-up hanya
-             memuat baris yang dikirim; sisanya dibuka di layar penuh. */
+        footerNote={fullLoading ? (
+          <p className="mb-1.5 flex items-center justify-center gap-1.5 text-[11px] text-[#6B6B73]"
+            data-testid={`${testIdBase}-fetching-all`}>
+            <RefreshCw size={11} className="animate-spin" />
+            Memuat {board.hidden ?? ""} dokumen lainnya…
+          </p>
+        ) : (board.truncated && !fullRows) ? (
+          /* Pengambilan penuh gagal / belum jalan — kejujuran pemotongan SERVER tetap
+             tampil beserta jalan keluarnya (layar penuh). */
           <button type="button" data-testid={`${testIdBase}-truncated`}
             onClick={go} disabled={!board.view}
             className="mb-2 w-full rounded-lg border border-dashed bg-white px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40"
             style={{ borderColor: `${accent}55`, color: accent }}>
-            Server memuat {board.shown ?? rows.length} dari {board.count} —
+            {fullError ? `${fullError} · ` : ""}Server memuat {board.shown ?? rows.length} dari {board.count} —
             {" "}{board.hidden ?? (board.count - rows.length)} lainnya belum tampil ·
             {" "}{gotoLabel}
           </button>

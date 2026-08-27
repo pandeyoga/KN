@@ -755,3 +755,44 @@ seed demo saat ini kebanyakan ≤5, itu perilaku benar.
 ### Backlog berikutnya
 - **P3** Testid baris meja masih bisa ganda lintas kartu (`desk-row-{id}`) — pertimbangkan
   prefiks id antrean bila agen uji butuh selektor strict.
+
+## Sesi 2026-06 (lanjutan-2) — Keputusan di pop-up, muat sisa baris, POS filter, redesign Retur
+### Yang dikerjakan
+- **Muat sisa baris papan** — endpoint baru `GET /api/approvals/queue-board/{key}`
+  (definisi antrean sama, INV-HOME-01, action per baris ikut izin); pop-up "Lihat semua"
+  `WaitingQueueBoard` kini mengambil sendiri sisa dokumen saat `truncated` (limit 300),
+  prop `entityId` diteruskan dari beranda/strip; kejujuran pemotongan tetap tampil bila
+  pengambilan gagal.
+- **Keputusan di pop-up Pusat Persetujuan** — `ApprovalDecisionModal.jsx` (baru):
+  "Tinjau & Putuskan" membuka pop-up berisi DETAIL dokumen per jenis (SO/PO/harga/retur
+  jual-beli/opname/amandemen — tabel item, nilai, alasan) + Setujui/Tolak dengan catatan
+  (tolak wajib alasan, kecuali PO yang endpoint-nya tanpa body) + "Buka layar penuh".
+  Tombol hanya tampil sesuai matriks izin; peninjau melihat teks read-only; detail 403
+  tidak lagi menampilkan kisi "Rp 0" yang menyesatkan.
+- **POS/Sales Portal** — `FacetRail` ditulis ulang: cuplikan 8 chip per grup + "+N lagi…"
+  + pop-up "Semua Filter" (portal ke body, z-120 — kartu produk punya stacking context);
+  chip terpilih tak pernah hilang dari rel; sticky rail `calc(100vh-2rem)` (celah bawah
+  hilang).
+- **Redesign Retur Jual** — daftar: strip PETA RETUR anti-dualisme (Retur Beli /
+  antar-PT / Kebijakan — tautan hidup sesuai peran), pil status jadi pipeline bernomor
+  1-5 + grup "Hasil", filter TIPE (retur/BS/penggantian/komplain/garansi → param
+  `return_type`), kolom Nilai (CN) & Umur berwarna, baris bisa diklik. Detail:
+  `ReturnStepper` (Draf→Persetujuan→Inspeksi→Penyelesaian + petunjuk langkah
+  berikutnya), kolom Harga & Nilai per item + total ESTIMASI (backend
+  `GET /sales-returns/{id}` kini menyulam `unit_price_est`/`line_total_est`/
+  `estimated_value` dari harga SO; angka resmi tetap Nota Kredit).
+- Perbaikan ikutan: arity `onNavigate` SalesReturns di `AppViewRouter` (dulu 1 argumen →
+  layar kosong), min-width tabel retur (teks bertumpuk).
+### Verifikasi
+Agen uji `iteration_260`: backend 10/10 PASS (pytest `test_iter260_board_returns.py`);
+frontend: modal keputusan E2E (approve PRET-00001, toast, daftar menyusut), read-only
+salesadmin, POS filter live 12→1 kartu, stepper maju setelah Setujui SRET-00001. Dua
+temuan blocking (modal POS tertutup kartu; peta retur layar kosong) DIPERBAIKI dan
+diverifikasi ulang manual (klik tanpa force + navigasi benar).
+### Catatan
+- Jalur UI "fetch-all" papan belum teruji dengan seed sekarang (semua antrean ≤3 baris,
+  tidak ada yang truncated); terverifikasi lewat API (limit=1 → truncated, rows==count).
+### Backlog berikutnya
+- **P3** Standarkan signature `onNavigate` (3 varian di AppViewRouter — sumber bug arity).
+- **P3** Ekstrak komponen Modal ber-portal bersama (tangga z-index satu tempat).
+- **P3** Log kegagalan enrichment harga di GET /sales-returns/{id} (kini diam).

@@ -335,6 +335,33 @@ async def approvals_backlog(request: Request, entity_id: str = None,
     return await abl.backlog(scope, with_oldest=bool(n), oldest_limit=n or 5)
 
 
+@router.get("/approvals/queue-board/{key}")
+async def approvals_queue_board(key: str, request: Request, entity_id: str = None,
+                                limit: int = 200) -> Dict[str, Any]:
+    """Isi LENGKAP satu antrean papan — dipakai pop-up "Lihat semua" (2026-06).
+
+    Papan beranda hanya membawa cuplikan (`limit` kecil + `truncated`); dulu sisanya
+    hanya bisa dilihat dengan pindah ke layar penuh. Endpoint ini mengembalikan
+    antrean yang SAMA (definisi tunggal `approval_backlog_service.queue_detail`,
+    INV-HOME-01) dengan batas besar, lengkap dengan `action` per baris sesuai izin
+    peran — jadi keputusan tetap bisa diambil dari dalam pop-up.
+    """
+    from dependencies import current_user, permission_matrix
+    await require_any_permission(request, [("order", "approve"), ("approval", "view")])
+    actor = await current_user(request)
+    ctx = await entity_ctx(request)
+    from services import approval_backlog_service as abl
+    ids = resolve_scope_ids(ctx, entity_id)
+    if getattr(ctx, "view_all", False) and not entity_id:
+        scope = None
+    else:
+        scope = ids[0] if len(ids) == 1 else {"$in": ids}
+    matrix = await permission_matrix()
+    allowed = matrix.get(actor.get("role")) or {}
+    n = max(1, min(int(limit or 200), 500))
+    return await abl.queue_detail(key, scope, limit=n, allowed=allowed, actor=actor)
+
+
 # ─── Inbox approver: antrian persetujuan (flat lintas SO, entity-scoped) ──────
 
 @router.get("/approvals/queue")

@@ -299,6 +299,7 @@ export default function ManagerHome({ selectedEntity = "all", onNavigate }) {
           const look = boardLook(b.key);
           return (
             <WaitingQueueBoard key={b.key} board={b} loading={loading && !data}
+              entityId={selectedEntity}
               unreadable={boardsUnreadable} onRetry={load} onNavigate={onNavigate}
               onActed={load}
               showEntity={showEntity} icon={look.icon} accent={look.accent}

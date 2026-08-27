@@ -219,6 +219,7 @@ export default function AdminHome({ token, selectedEntity = "all", onNavigate })
             const so = b.key === "special_order";
             return (
               <WaitingQueueBoard key={b.key} board={b} loading={loading}
+                entityId={selectedEntity}
                 unreadable={boardsUnreadable} onRetry={load} onNavigate={onNavigate}
                 onActed={load}
                 showEntity={showEntity} icon={look.icon} accent={look.accent}

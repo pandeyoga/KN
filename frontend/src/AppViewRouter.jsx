@@ -308,7 +308,7 @@ export default function AppViewRouter(props) {
       )}
       {activeView === "returns" && (
         <SalesReturns currentUser={user}
-          onNavigate={(target) => onNavSelect(target, target)} />
+          onNavigate={(navId, view, tab) => onNavSelect(navId, view, tab)} />
       )}
       {activeView === "return-policies" && <ReturnPoliciesView currentUser={user} />}
       {activeView === "amendments" && <AmendmentCenterView currentUser={user} selectedEntity={selectedEntity} />}

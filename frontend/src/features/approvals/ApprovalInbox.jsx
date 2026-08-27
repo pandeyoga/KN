@@ -11,6 +11,8 @@ import ErrorNotice from "../../components/ErrorNotice";
 import { resolveDeepLinkTarget } from "../../config/navigationConfig";
 import PaginationBar from "../../components/PaginationBar";
 import SeeAllModal, { SeeAllFooter } from "../../components/SeeAllModal";
+import ApprovalDecisionModal from "./ApprovalDecisionModal";
+import { notifySuccess } from "../../utils/feedback";
 
 /**
  * ApprovalInbox — "Pusat Persetujuan" (FASE 5 — terpadu).
@@ -66,6 +68,8 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
   const [tab, setTab] = useState("all");
   const [page, setPage] = useState(1);
   const [showAllOthers, setShowAllOthers] = useState(false);
+  // KEPUTUSAN DI TEMPAT (2026-06) — baris dibuka sebagai pop-up detail + Setujui/Tolak.
+  const [reviewItem, setReviewItem] = useState(null);
   /**
    * RINGKASAN SELURUH ANTREAN (F-3, 2026-08-15) — dari `GET /approvals/backlog`,
    * sumber yang SAMA dengan KPI beranda. Sebelum ini layar ini menghitung
@@ -429,7 +433,7 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
                       <p className="text-[13px] font-bold tabular-nums text-[#1C1C1E]">{formatCurrency(it.amount)}</p>
                     )}
                     <button data-testid={`approval-inbox-review-${it.id}`}
-                      onClick={() => handleReview(it)}
+                      onClick={() => setReviewItem(it)}
                       className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-[#0058CC] hover:underline">
                       Tinjau & Putuskan <ArrowRight size={12} />
                     </button>
@@ -449,6 +453,18 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
           </div>
         )}
       </div>
+
+      {reviewItem && (
+        <ApprovalDecisionModal item={reviewItem} currentUser={currentUser}
+          meta={KIND_META[reviewItem.kind]}
+          onClose={() => setReviewItem(null)}
+          onOpenFull={() => { const it = reviewItem; setReviewItem(null); handleReview(it); }}
+          onDecided={(msg) => {
+            setReviewItem(null);
+            notifySuccess(msg, "Antrean persetujuan diperbarui.");
+            load();
+          }} />
+      )}
     </div>
   );
 }
