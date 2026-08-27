@@ -8,6 +8,7 @@ import PeriodUnlockCard from "../../components/PeriodUnlockCard";
 import ErrorNotice from "../../components/ErrorNotice";
 import WaitingQueueBoard from "../../components/WaitingQueueBoard";
 import { boardLook, selectWaitingBoards } from "../../config/waitingBoards";
+import SeeAllModal, { SeeAllFooter } from "../../components/SeeAllModal";
 
 const fmt = new Intl.NumberFormat("id-ID");
 const fmtCur = (v) => `Rp ${fmt.format(Math.round(v || 0))}`;
@@ -39,6 +40,7 @@ export default function AdminHome({ token, selectedEntity = "all", onNavigate })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [data, setData] = useState(null);
+  const [showAllStock, setShowAllStock] = useState(false);
 
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -96,6 +98,16 @@ export default function AdminHome({ token, selectedEntity = "all", onNavigate })
       : (topApproval
         ? `Terbanyak: ${topApproval.label.replace(" menunggu ACC", "")} (${topApproval.count}) · klik untuk buka`
         : "Perlu ditindak");
+
+  // Baris stok — dipakai kartu (cuplikan 6) dan pop-up "Lihat semua".
+  const renderStockRow = (it, idx) => (
+    <div key={it.product_id || idx} className="grid grid-cols-[1fr_90px_90px] gap-2 text-[12px] py-1.5 border-b border-[#F5F5F7] last:border-0 items-center">
+      <div className="min-w-0"><p className="font-semibold truncate">{it.product_name || it.name}</p>
+        <p className="text-[10px] text-[#8E8E93]">{it.sku || ""}</p></div>
+      <span className="text-right tabular-nums text-[#6B6B73]">Stok fisik {fmt.format(it.on_hand ?? it.available_qty ?? 0)}</span>
+      <span className="text-right tabular-nums font-bold text-[#FF6B00]">ROP {fmt.format(it.reorder_point ?? 0)}</span>
+    </div>
+  );
 
   return (
     <section data-testid="admin-home" className="section-card">
@@ -260,17 +272,24 @@ export default function AdminHome({ token, selectedEntity = "all", onNavigate })
             <button onClick={() => onNavigate && onNavigate("reorder")} className="text-[12px] font-semibold text-[#007AFF]" data-testid="admin-home-goto-reorder">Lihat semua →</button>
           </div>
           {(lowStock.items || []).length > 0 ? (
-            <div className="grid gap-1 max-h-64 overflow-auto">
-              {lowStock.items.map((it, idx) => (
-                <div key={it.product_id || idx} className="grid grid-cols-[1fr_90px_90px] gap-2 text-[12px] py-1.5 border-b border-[#F5F5F7] last:border-0 items-center">
-                  <div className="min-w-0"><p className="font-semibold truncate">{it.product_name || it.name}</p>
-                    <p className="text-[10px] text-[#8E8E93]">{it.sku || ""}</p></div>
-                  <span className="text-right tabular-nums text-[#6B6B73]">Stok fisik {fmt.format(it.on_hand ?? it.available_qty ?? 0)}</span>
-                  <span className="text-right tabular-nums font-bold text-[#FF6B00]">ROP {fmt.format(it.reorder_point ?? 0)}</span>
-                </div>
-              ))}
-            </div>
+            <>
+              {/* UI/UX 2026-06 — dulu seluruh baris digulung dalam kotak ber-scroll;
+                  sekarang cuplikan 6 teratas + pop-up "Lihat semua" ber-pencarian. */}
+              <div className="grid gap-1">
+                {(lowStock.items || []).slice(0, 6).map((it, idx) => renderStockRow(it, idx))}
+              </div>
+              <SeeAllFooter shown={Math.min(6, (lowStock.items || []).length)}
+                total={(lowStock.items || []).length} label="produk" accent="#FF6B00"
+                onClick={() => setShowAllStock(true)} testId="admin-home-lowstock-see-all" />
+            </>
           ) : <div className="h-20 flex items-center justify-center text-[13px] text-[#8E8E93]">Semua stok di atas titik reorder</div>}
+          <SeeAllModal open={showAllStock} onClose={() => setShowAllStock(false)}
+            title="Stok Perlu Reorder" subtitle="Produk di bawah titik reorder (ROP)"
+            icon={PackageX} accent="#FF6B00" rows={lowStock.items || []}
+            rowText={(it) => `${it.product_name || it.name || ""} ${it.sku || ""}`}
+            renderRow={(it, idx) => renderStockRow(it, idx)}
+            listClassName="px-4" searchPlaceholder="Cari produk atau SKU…"
+            testId="admin-home-lowstock-modal" />
         </div>
       </div>
     </section>

@@ -2,29 +2,40 @@
  * DeskQueueCard — satu ANTREAN meja kerja (dipakai Meja Admin Sales & Meja Finance).
  *
  * Aturan desain yang dijaga komponen ini (US15):
- *  1. Setiap antrean membawa **JUMLAH · NILAI · UMUR TERTUA** di kepalanya. Antrean
- *     tanpa tiga angka itu memaksa pengguna membuka isinya untuk tahu apakah perlu
- *     dibuka — itu bukan meja kerja, itu daftar.
- *  2. **Satu tindakan jelas per baris.** Bukan menu tiga titik: pengguna meja kerja
- *     mengerjakan satu hal berulang kali, jadi tombolnya harus langsung terlihat.
- *  3. Satuannya ikut jenis nilainya. Antrean "perlu dipenuhi" menghitung YARD, bukan
- *     rupiah; menulis `Rp 200` untuk 200 yard adalah cara tercepat kehilangan
- *     kepercayaan pengguna pada seluruh ringkasan.
+ *  1. Setiap antrean membawa **JUMLAH · NILAI · UMUR TERTUA** di kepalanya.
+ *  2. **Satu tindakan jelas per baris.** Bukan menu tiga titik.
+ *  3. Satuannya ikut jenis nilainya (yard vs rupiah) — `value_kind`.
+ *
+ * UI/UX 2026-06 (keluhan pemilik):
+ *  4. Kartu hanya menampilkan CUPLIKAN 5 baris teratas (urutan server = paling
+ *     mendesak dulu). Server bisa mengirim hingga 60 baris (`ROW_LIMIT`); merender
+ *     semuanya membuat satu kartu setinggi tiga layar. Selebihnya dibuka lewat
+ *     "Lihat semua" → pop-up dengan pencarian + paginasi (`SeeAllModal`), dan
+ *     tindakan per baris tetap bisa dikerjakan DI DALAM pop-up.
+ *  5. Buka/tutup kartu beranimasi (`Collapse`) + panah yang berputar — sebelumnya
+ *     isinya hilang mendadak dan kartu di grid 2 kolom ikut setinggi tetangganya
+ *     (kesan "statis"); `self-start` membuat tiap kartu memakai tingginya sendiri.
  */
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Inbox } from "lucide-react";
+import { ChevronDown, Inbox } from "lucide-react";
 import { formatCurrency, formatQty } from "../../utils/formatters";
 import { ageTone, badgeClass, badgeLabel, queueMeta } from "./workDeskApi";
+import Collapse from "../../components/Collapse";
+import SeeAllModal, { SeeAllFooter } from "../../components/SeeAllModal";
+
+const PREVIEW_ROWS = 5;
 
 export default function DeskQueueCard({
   queue, onAction, busyRef = "", testPrefix = "desk", defaultOpen, loading = false,
 }) {
   const [open, setOpen] = useState(
     defaultOpen === undefined ? (queue?.count || 0) > 0 : defaultOpen);
+  const [showAll, setShowAll] = useState(false);
   const meta = queueMeta(queue?.id);
   const Icon = meta.icon;
   const isQty = queue?.value_kind === "qty";
   const rows = Array.isArray(queue?.rows) ? queue.rows : [];
+  const visible = rows.slice(0, PREVIEW_ROWS);
   const oldest = ageTone(queue?.oldest_age_days);
 
   const totalText = isQty
@@ -32,11 +43,12 @@ export default function DeskQueueCard({
     : formatCurrency(queue?.total_value);
 
   return (
-    <section className="section-card" data-testid={`${testPrefix}-queue-${queue?.id}`}>
+    <section className="section-card self-start" data-testid={`${testPrefix}-queue-${queue?.id}`}>
       <button
         type="button"
         data-testid={`${testPrefix}-queue-toggle-${queue?.id}`}
         onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
         className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left hover:bg-[#FAFBFC]"
       >
         <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg"
@@ -74,43 +86,66 @@ export default function DeskQueueCard({
             {totalText}
           </span>
         </span>
-        <span className="mt-1 shrink-0 text-[#9A9BA3]">
-          {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}
+        <span className={`mt-1 shrink-0 text-[#9A9BA3] transition-transform duration-300 ${
+          open ? "rotate-0" : "-rotate-90"}`}>
+          <ChevronDown size={15} />
         </span>
       </button>
 
-      {/* Saat antrean sedang dimuat ulang, angka lama masih terpampang. Tanpa
-          penanda ini pengguna menindak baris yang mungkin sudah berpindah antrean. */}
-      {open && loading && rows.length > 0 && (
-        <p data-testid={`${testPrefix}-refreshing-${queue?.id}`}
-           className="border-t border-[#EFF0F2] bg-[#FAFBFC] px-3 py-1 text-[10.5px] text-[#8E8E93]">
-          Memuat ulang antrean…
-        </p>
-      )}
+      <Collapse open={open}>
+        <div>
+          {/* Saat antrean sedang dimuat ulang, angka lama masih terpampang. Tanpa
+              penanda ini pengguna menindak baris yang mungkin sudah berpindah antrean. */}
+          {loading && rows.length > 0 && (
+            <p data-testid={`${testPrefix}-refreshing-${queue?.id}`}
+               className="border-t border-[#EFF0F2] bg-[#FAFBFC] px-3 py-1 text-[10.5px] text-[#8E8E93]">
+              Memuat ulang antrean…
+            </p>
+          )}
 
-      {open && (
-        loading && rows.length === 0 ? (
-          <p data-testid={`${testPrefix}-loading-${queue?.id}`}
-             className="border-t border-[#EFF0F2] px-3 py-7 text-center text-[11.5px] text-[#6B6B73]">
-            Memuat antrean…
-          </p>
-        ) : rows.length === 0 ? (
-          <div data-testid={`${testPrefix}-empty-${queue?.id}`}
+          {loading && rows.length === 0 ? (
+            <p data-testid={`${testPrefix}-loading-${queue?.id}`}
                className="border-t border-[#EFF0F2] px-3 py-7 text-center text-[11.5px] text-[#6B6B73]">
-            <Inbox size={22} className="mx-auto mb-1.5 text-[#D6D6DB]" />
-            Antrean ini bersih — tidak ada yang perlu ditindak.
-          </div>
-        ) : (
-          <div className="divide-y divide-[#F4F5F7] border-t border-[#EFF0F2]">
-            {rows.map((row) => (
-              <QueueRow key={`${row.ref_type}-${row.ref_id}`} row={row} queue={queue}
-                        isQty={isQty} busy={busyRef === row.ref_id}
-                        testPrefix={testPrefix}
-                        onAction={() => onAction?.(row, queue)} />
-            ))}
-          </div>
-        )
-      )}
+              Memuat antrean…
+            </p>
+          ) : rows.length === 0 ? (
+            <div data-testid={`${testPrefix}-empty-${queue?.id}`}
+                 className="border-t border-[#EFF0F2] px-3 py-7 text-center text-[11.5px] text-[#6B6B73]">
+              <Inbox size={22} className="mx-auto mb-1.5 text-[#D6D6DB]" />
+              Antrean ini bersih — tidak ada yang perlu ditindak.
+            </div>
+          ) : (
+            <div className="divide-y divide-[#F4F5F7] border-t border-[#EFF0F2]">
+              {visible.map((row, i) => (
+                <QueueRow key={`${row.ref_type}-${row.ref_id}-${row.number || i}`}
+                          row={row} queue={queue}
+                          isQty={isQty} busy={busyRef === row.ref_id}
+                          testPrefix={testPrefix}
+                          onAction={() => onAction?.(row, queue)} />
+              ))}
+            </div>
+          )}
+
+          {/* Jujur soal pemotongan: kartu = cuplikan, pop-up = semuanya. */}
+          <SeeAllFooter shown={visible.length} total={rows.length} label="baris"
+            accent={meta.tone} onClick={() => setShowAll(true)}
+            testId={`${testPrefix}-see-all-${queue?.id}`} />
+        </div>
+      </Collapse>
+
+      <SeeAllModal open={showAll} onClose={() => setShowAll(false)}
+        title={queue?.label} subtitle={queue?.hint} icon={Icon} accent={meta.tone}
+        rows={rows}
+        rowText={(r) => `${r.number || ""} ${r.title || ""} ${r.subtitle || ""}`}
+        renderRow={(row, i) => (
+          <QueueRow key={`${row.ref_type}-${row.ref_id}-${row.number || i}`}
+                    row={row} queue={queue}
+                    isQty={isQty} busy={busyRef === row.ref_id}
+                    testPrefix={`${testPrefix}-modal`}
+                    onAction={() => onAction?.(row, queue)} />
+        )}
+        emptyText="Tidak ada baris antrean yang cocok dengan pencarian."
+        testId={`${testPrefix}-see-all-modal-${queue?.id}`} />
     </section>
   );
 }

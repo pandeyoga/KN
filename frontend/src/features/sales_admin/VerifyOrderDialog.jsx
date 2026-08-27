@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, ClipboardCheck, Info, XCircle } from "lucide-react";
 import ErrorNotice from "../../components/ErrorNotice";
 import { apiErrorText } from "../../utils/apiError";
+import { useEscapeClose } from "../../utils/escapeLayers";
 import { verificationPreview, verifyOrder } from "./workDeskApi";
 
 export default function VerifyOrderDialog({
@@ -25,6 +26,7 @@ export default function VerifyOrderDialog({
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  useEscapeClose(true, onClose);
 
   const load = useCallback(async () => {
     setLoading(true);

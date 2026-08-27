@@ -720,3 +720,38 @@ POC `test_core_sesi_2026_06c_poc.py` **21 PASS · 0 FAIL** (nol residu diukur) �
 - **P2** `contra_bon_dispute`, `payment_variance`, `inspection_hold`, `rnd_sample` belum
   bisa diputuskan dari papan (butuh dialog PILIHAN / per baris).
 - **P3** Tombol papan hanya "setujui"; menolak masih harus lewat layarnya.
+
+## Sesi 2026-06 (lanjutan) — UI/UX "kartu = cuplikan, pop-up = semuanya"
+Permintaan pemilik: kartu antrean di Beranda / Pusat Persetujuan / Meja Admin Sales /
+Meja Finance memanjang ke bawah bila datanya banyak; expand/collapse meja terasa statis.
+
+### Yang dikerjakan
+- **`components/SeeAllModal.jsx` (baru)** — `SeeAllFooter` ("Menampilkan X dari Y ·
+  Lihat semua →") + pop-up dengan pencarian, paginasi 10/hal, Esc (`useEscapeClose`),
+  backdrop (`overlayDismiss`), kunci scroll body, kepala & kaki sticky.
+- **`components/Collapse.jsx` (baru)** — buka/tutup beranimasi (grid-rows 0fr→1fr).
+- **`DeskQueueCard.jsx`** — cuplikan 5 baris + Lihat semua (aksi per baris tetap jalan
+  DI DALAM pop-up); Collapse beranimasi + panah berputar; `self-start` supaya kartu di
+  grid 2 kolom memakai tingginya sendiri; kunci baris unik (`ref_type-ref_id-number`).
+- **`WaitingQueueBoard.jsx`** — cuplikan 5 + pop-up; kejujuran pemotongan server
+  (`shown/hidden`, testid `-truncated`) pindah ke kaki pop-up dengan tombol layar penuh.
+- **`ApprovalInbox.jsx`** — daftar utama berhalaman 15/hal (`PaginationBar`, reset saat
+  ganti tab); "Menunggu di layar lain" cuplikan 5 + pop-up (param `oldest` 15→50).
+- **`AdminHome.jsx`** stok reorder cuplikan 6 + pop-up (kotak scroll dihapus);
+  **`ManagerHome.jsx`** tim sales cuplikan 6 + pop-up.
+- Perbaikan ikutan dari agen uji: Esc di `VerifyOrderDialog`; panggilan `/rnd/meta`
+  dipagari `can(user.permissions,"rnd","view")` (403 console di Meja Finance hilang).
+- Infra: frontend = bundel statis — setiap perubahan src wajib
+  `bash /app/scripts/rebuild_frontend.sh` (BUILD OK ≈ 35 dtk).
+
+### Verifikasi
+Agen uji `iteration_259` — frontend 95%, nol cacat blocking; pop-up terbukti hidup di
+`admin-home-lowstock-modal` (8 baris) & `approval-inbox-others-modal` (16 baris, 2 hal,
+pencarian, Esc, navigasi); animasi Collapse terukur (289px→64px); aksi tulis
+(Konfirmasi SO, Terbitkan Faktur Pajak, Setujui papan manajer) tetap jalan.
+Catatan seed: footer "Lihat semua" pada antrean meja & papan hanya muncul bila >5 baris —
+seed demo saat ini kebanyakan ≤5, itu perilaku benar.
+
+### Backlog berikutnya
+- **P3** Testid baris meja masih bisa ganda lintas kartu (`desk-row-{id}`) — pertimbangkan
+  prefiks id antrean bila agen uji butuh selektor strict.

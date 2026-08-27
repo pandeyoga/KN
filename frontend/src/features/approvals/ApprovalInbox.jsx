@@ -9,6 +9,8 @@ import ErrorNotice from "../../components/ErrorNotice";
 // Tujuan navigasi yang SAH untuk peran ini (sumber sama dengan Ctrl+K & deep-link) —
 // dipakai ringkasan antrean agar tidak pernah menawarkan tautan yang buntu.
 import { resolveDeepLinkTarget } from "../../config/navigationConfig";
+import PaginationBar from "../../components/PaginationBar";
+import SeeAllModal, { SeeAllFooter } from "../../components/SeeAllModal";
 
 /**
  * ApprovalInbox — "Pusat Persetujuan" (FASE 5 — terpadu).
@@ -54,11 +56,16 @@ function timeAgo(iso) {
 
 const arr = (d) => (Array.isArray(d) ? d : (Array.isArray(d?.items) ? d.items : []));
 
+// UI/UX 2026-06 — daftar utama berhalaman (bukan satu gulungan panjang ke bawah).
+const PAGE_SIZE = 15;
+
 export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("all");
+  const [page, setPage] = useState(1);
+  const [showAllOthers, setShowAllOthers] = useState(false);
   /**
    * RINGKASAN SELURUH ANTREAN (F-3, 2026-08-15) — dari `GET /approvals/backlog`,
    * sumber yang SAMA dengan KPI beranda. Sebelum ini layar ini menghitung
@@ -102,7 +109,7 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
         // kontrabon, permintaan internal, cuti, lembur, uang muka, klaim makloon, …).
         // Tanpa ini antrean-antrean itu hanya jadi angka di chip; sekarang orangnya bisa
         // melihat NOMOR dokumen + sudah berapa lama menunggu, lalu melompat ke layarnya.
-        grab("Ringkasan Antrean", axios.get(`${API}/approvals/backlog`, { params: { oldest: 15 } })),
+        grab("Ringkasan Antrean", axios.get(`${API}/approvals/backlog`, { params: { oldest: 50 } })),
       ]);
       setUnavailable(gagal);
       setBacklog(blRes?.data && !Array.isArray(blRes.data) ? blRes.data : null);
@@ -197,6 +204,9 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
     return acc;
   }, {});
   const filtered = items.filter((i) => tab === "all" || groupOf(i) === tab);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const curPage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((curPage - 1) * PAGE_SIZE, curPage * PAGE_SIZE);
   /**
    * Berapa dari total antrean yang TIDAK diurus daftar layar ini (transfer gudang,
    * kontrabon, permintaan internal & retur antar-PT, tagihan supplier, biaya masuk,
@@ -213,6 +223,42 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
   //: dokumen NYATA dari antrean-antrean itu (paling lama menunggu lebih dulu).
   const othersOldest = (backlog?.oldest || [])
     .filter((o) => !DITAMPILKAN_DI_SINI.includes(o.key));
+
+  // Satu penggambar baris "menunggu di layar lain" untuk kartu (cuplikan 5) DAN
+  // pop-up "Lihat semua" — testid dibedakan lewat `base`.
+  const renderOther = (o, base = "approval-inbox-other") => {
+    const target = resolveDeepLinkTarget(o.view, currentUser?.role);
+    return (
+      <div key={`${o.key}-${o.id}`} data-testid={`${base}-${o.id}`}
+        className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#FAFBFC]">
+        <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#FEF3C7] text-[#B45309]">
+          <Clock size={14} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] font-bold text-[#1C1C1E] truncate">{o.number}</span>
+            <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#F2F2F7] text-[#6B6B73]">
+              {o.queue_label.replace(" menunggu ACC", "")}
+            </span>
+          </div>
+          <p className="text-[11px] text-[#6B6B73] truncate">{o.title || "—"}</p>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="text-[11px] font-semibold tabular-nums text-[#B45309]">
+            {o.days_waiting === 0 ? "hari ini" : `menunggu ${o.days_waiting} hari`}
+          </p>
+          <button data-testid={`${base}-open-${o.id}`}
+            disabled={!target}
+            title={target ? `Buka ${o.queue_label}` : "Antrean ini bukan wilayah peran Anda"}
+            onClick={() => target && onNavigate?.(target.navId, target.view, target.tab)}
+            className={`mt-1 inline-flex items-center gap-1 text-[11px] font-bold ${
+              target ? "text-[#0058CC] hover:underline" : "text-[#8E8E93] cursor-not-allowed"}`}>
+            Buka layarnya <ArrowRight size={12} />
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   const handleReview = (it) => {
     if (it.isSO && onOpenDocument) {
@@ -299,7 +345,8 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
           <div className="tab-bar">
             {TABS.map((t) => (
               <button key={t.key} data-testid={`approval-inbox-tab-${t.key}`}
-                className={`tab-button ${tab === t.key ? "active" : ""}`} onClick={() => setTab(t.key)}>
+                className={`tab-button ${tab === t.key ? "active" : ""}`}
+                onClick={() => { setTab(t.key); setPage(1); }}>
                 {t.label}<span className="tab-badge">{counts[t.key]}</span>
               </button>
             ))}
@@ -328,40 +375,18 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
             </div>
           </div>
           <div className="divide-y divide-[#EFF0F2]">
-            {othersOldest.map((o) => {
-              const target = resolveDeepLinkTarget(o.view, currentUser?.role);
-              return (
-                <div key={`${o.key}-${o.id}`} data-testid={`approval-inbox-other-${o.id}`}
-                  className="flex items-center gap-3 px-3 py-2.5 hover:bg-[#FAFBFC]">
-                  <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-[#FEF3C7] text-[#B45309]">
-                    <Clock size={14} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[12px] font-bold text-[#1C1C1E] truncate">{o.number}</span>
-                      <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#F2F2F7] text-[#6B6B73]">
-                        {o.queue_label.replace(" menunggu ACC", "")}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-[#6B6B73] truncate">{o.title || "—"}</p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-[11px] font-semibold tabular-nums text-[#B45309]">
-                      {o.days_waiting === 0 ? "hari ini" : `menunggu ${o.days_waiting} hari`}
-                    </p>
-                    <button data-testid={`approval-inbox-other-open-${o.id}`}
-                      disabled={!target}
-                      title={target ? `Buka ${o.queue_label}` : "Antrean ini bukan wilayah peran Anda"}
-                      onClick={() => target && onNavigate?.(target.navId, target.view, target.tab)}
-                      className={`mt-1 inline-flex items-center gap-1 text-[11px] font-bold ${
-                        target ? "text-[#0058CC] hover:underline" : "text-[#8E8E93] cursor-not-allowed"}`}>
-                      Buka layarnya <ArrowRight size={12} />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+            {othersOldest.slice(0, 5).map((o) => renderOther(o))}
           </div>
+          <SeeAllFooter shown={Math.min(5, othersOldest.length)} total={othersOldest.length}
+            label="dokumen" accent="#B45309" onClick={() => setShowAllOthers(true)}
+            testId="approval-inbox-others-see-all" />
+          <SeeAllModal open={showAllOthers} onClose={() => setShowAllOthers(false)}
+            title="Menunggu di layar lain"
+            subtitle="Paling lama menunggu lebih dulu — klik untuk melompat ke layar keputusannya"
+            icon={Clock} accent="#B45309" rows={othersOldest}
+            rowText={(o) => `${o.number || ""} ${o.title || ""} ${o.queue_label || ""}`}
+            renderRow={(o) => renderOther(o, "approval-inbox-other-modal")}
+            testId="approval-inbox-others-modal" />
         </div>
       )}
 
@@ -376,7 +401,7 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
           </div>
         ) : (
           <div className="divide-y divide-[#EFF0F2]">
-            {filtered.map((it) => {
+            {pageRows.map((it) => {
               const m = KIND_META[it.kind] || KIND_META.po;
               const Icon = m.icon;
               return (
@@ -412,6 +437,15 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
                 </div>
               );
             })}
+          </div>
+        )}
+        {!loading && filtered.length > PAGE_SIZE && (
+          <div className="border-t border-[#EFF0F2] p-2.5">
+            <PaginationBar page={curPage} pageSize={PAGE_SIZE} total={filtered.length}
+              hasMore={curPage < totalPages}
+              onPrev={() => setPage((p) => Math.max(1, p - 1))}
+              onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+              testId="approval-inbox-pager" label="persetujuan" />
           </div>
         )}
       </div>

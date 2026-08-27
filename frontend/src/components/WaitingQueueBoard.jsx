@@ -13,6 +13,7 @@
  */
 import { RefreshCw } from "lucide-react";
 import { useState } from "react";
+import SeeAllModal, { SeeAllFooter } from "./SeeAllModal";
 import axios, { API } from "../services/apiClient";
 import { askConfirm, askReason } from "../services/confirmService";
 import { notifySuccess } from "../utils/feedback";
@@ -46,6 +47,10 @@ export default function WaitingQueueBoard({
   const judul = title || (board.label || "Menunggu keputusan");
   const [busyId, setBusyId] = useState("");
   const [actError, setActError] = useState("");
+  // UI/UX 2026-06 — papan hanya menampilkan CUPLIKAN 5 teratas (paling lama dulu);
+  // selebihnya lewat pop-up "Lihat semua" supaya papan tidak memanjang ke bawah.
+  const [showAll, setShowAll] = useState(false);
+  const visible = rows.slice(0, 5);
 
   /**
    * PAPAN BISA DITINDAK (2026-06) — keputusan selesai TANPA pindah layar.
@@ -107,6 +112,45 @@ export default function WaitingQueueBoard({
     } finally { setBusyId(""); }
   }
 
+  // Satu penggambar baris untuk kartu DAN pop-up "Lihat semua" (testid dibedakan
+  // lewat `base` supaya tidak ganda saat pop-up terbuka).
+  const renderRow = (r, base) => (
+    <div key={r.id || r.number}
+      className="flex items-center gap-2 rounded-lg border border-[#EDEFF3] bg-white px-3 py-2 transition hover:border-[#C9D6E8]">
+      <button type="button" data-testid={`${base}-${r.id}`}
+        onClick={go}
+        className="min-w-0 flex-1 text-left">
+        <p className="flex items-center gap-1.5 truncate text-[12px] font-semibold text-[#1C1C1E]">
+          {r.number} · {r.title}
+          {showEntity && r.entity_id ? <EntityBadge entityId={r.entity_id} /> : null}
+        </p>
+        <p className="truncate text-[10.5px] text-[#8E8E93]">
+          {/* Label peran dari registry (`Manajer`), bukan kode mentah (C1). */}
+          {r.note || judul}{r.role ? ` · perlu ${roleLabel(r.role)}` : ""}
+        </p>
+      </button>
+      {r.amount > 0 && (
+        <span className="shrink-0 text-[12px] font-bold tabular-nums"
+          style={{ color: accent }}>{fmtCur(r.amount)}</span>
+      )}
+      <AgeBadge days={r.days_waiting} testId={`${base}-age-${r.id}`} />
+      {/* Tombol keputusan hanya ada bila SERVER memberi `action`: itu berarti
+          pintunya nyata DAN peran ini memang berwenang. */}
+      {r.action && (
+        <button type="button"
+          data-testid={`${base}-act-${r.id}`}
+          disabled={busyId === r.id || !!r.action.blocked_reason}
+          onClick={() => act(r)}
+          className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-40"
+          style={{ background: accent }}
+          title={r.action.blocked_reason
+            || `${r.action.label} langsung dari papan ini`}>
+          {busyId === r.id ? "…" : r.action.label}
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="rounded-xl border p-4"
       style={{ borderColor: `${accent}33`, background: `${accent}0A` }}
@@ -158,56 +202,36 @@ export default function WaitingQueueBoard({
               <button onClick={() => setActError("")}>×</button>
             </div>
           )}
-          {rows.map((r) => (
-            <div key={r.id || r.number}
-              className="flex items-center gap-2 rounded-lg border border-[#EDEFF3] bg-white px-3 py-2 transition hover:border-[#C9D6E8]">
-              <button type="button" data-testid={`${rowTestIdBase}-${r.id}`}
-                onClick={go}
-                className="min-w-0 flex-1 text-left">
-                <p className="flex items-center gap-1.5 truncate text-[12px] font-semibold text-[#1C1C1E]">
-                  {r.number} · {r.title}
-                  {showEntity && r.entity_id ? <EntityBadge entityId={r.entity_id} /> : null}
-                </p>
-                <p className="truncate text-[10.5px] text-[#8E8E93]">
-                  {/* Label peran dari registry (`Manajer`), bukan kode mentah (C1). */}
-                  {r.note || judul}{r.role ? ` · perlu ${roleLabel(r.role)}` : ""}
-                </p>
-              </button>
-              {r.amount > 0 && (
-                <span className="shrink-0 text-[12px] font-bold tabular-nums"
-                  style={{ color: accent }}>{fmtCur(r.amount)}</span>
-              )}
-              <AgeBadge days={r.days_waiting} testId={`${rowTestIdBase}-age-${r.id}`} />
-              {/* Tombol keputusan hanya ada bila SERVER memberi `action`: itu berarti
-                  pintunya nyata DAN peran ini memang berwenang. */}
-              {r.action && (
-                <button type="button"
-                  data-testid={`${rowTestIdBase}-act-${r.id}`}
-                  disabled={busyId === r.id || !!r.action.blocked_reason}
-                  onClick={() => act(r)}
-                  className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold text-white transition disabled:cursor-not-allowed disabled:opacity-40"
-                  style={{ background: accent }}
-                  title={r.action.blocked_reason
-                    || `${r.action.label} langsung dari papan ini`}>
-                  {busyId === r.id ? "…" : r.action.label}
-                </button>
-              )}
-            </div>
-          ))}
+          {visible.map((r) => renderRow(r, rowTestIdBase))}
           {/* Angka di judul tidak boleh lebih besar dari daftar di layar yang sama
-              TANPA satu pun tanda (B2). Penanda datang dari backend. */}
-          {board.truncated && (
-            <button type="button" data-testid={`${testIdBase}-truncated`}
-              onClick={go} disabled={!board.view}
-              className="rounded-lg border border-dashed bg-white/60 px-3 py-2 text-[11.5px] font-semibold disabled:opacity-40"
-              style={{ borderColor: `${accent}55`, color: accent }}>
-              Menampilkan {board.shown ?? rows.length} dari {board.count} —
-              {" "}{board.hidden ?? (board.count - rows.length)} lainnya belum tampil ·
-              {" "}{gotoLabel}
-            </button>
-          )}
+              TANPA satu pun tanda (B2): kartu = cuplikan 5 teratas, pop-up = semuanya. */}
+          <SeeAllFooter shown={visible.length} total={board.count ?? rows.length}
+            label="dokumen" onClick={() => setShowAll(true)}
+            testId={`${testIdBase}-see-all`}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed bg-white/60 px-3 py-2 text-[11.5px] font-semibold transition-colors hover:bg-white"
+            style={{ color: accent, borderColor: `${accent}55` }} />
         </div>
       )}
+
+      <SeeAllModal open={showAll} onClose={() => setShowAll(false)}
+        title={judul} icon={Icon} accent={accent} rows={rows}
+        subtitle="Terurut dari yang paling lama menunggu"
+        rowText={(r) => `${r.number || ""} ${r.title || ""} ${r.note || ""}`}
+        renderRow={(r) => renderRow(r, `${rowTestIdBase}-modal`)}
+        listClassName="grid gap-1.5 p-3"
+        testId={`${testIdBase}-see-all-modal`}
+        footerNote={board.truncated ? (
+          /* Kejujuran pemotongan SERVER (`shown`/`hidden`) tetap tampil — pop-up hanya
+             memuat baris yang dikirim; sisanya dibuka di layar penuh. */
+          <button type="button" data-testid={`${testIdBase}-truncated`}
+            onClick={go} disabled={!board.view}
+            className="mb-2 w-full rounded-lg border border-dashed bg-white px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40"
+            style={{ borderColor: `${accent}55`, color: accent }}>
+            Server memuat {board.shown ?? rows.length} dari {board.count} —
+            {" "}{board.hidden ?? (board.count - rows.length)} lainnya belum tampil ·
+            {" "}{gotoLabel}
+          </button>
+        ) : null} />
     </div>
   );
 }

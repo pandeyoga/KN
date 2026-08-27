@@ -136,7 +136,11 @@ export function useAppActions(state) {
         // FASE F — kebijakan lifecycle produk (rnd.lifecycle_enforcement) supaya POS
         // bisa MENANDAI produk yang belum boleh dijual sebelum sales menabrak
         // penolakan server di ujung checkout. Server tetap penjaga terakhir.
-        axios.get(`${API}/rnd/meta${eq}`).catch(() => ({ data: { policy: {} } })),
+        // Dipagari izin: peran tanpa `rnd.view` (mis. Finance) tidak lagi memanggil
+        // dan memunculkan 403 di console.
+        can(user?.permissions, "rnd", "view")
+          ? axios.get(`${API}/rnd/meta${eq}`).catch(() => ({ data: { policy: {} } }))
+          : Promise.resolve({ data: { policy: {} } }),
       ]);
       const rndPolicy = rndResp.data?.policy || {};
       rndEnforcementRef.current = String(rndPolicy.lifecycle_enforcement || "block");

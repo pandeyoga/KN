@@ -19,6 +19,7 @@ import ErrorNotice from "../../components/ErrorNotice";
 import WaitingQueueBoard from "../../components/WaitingQueueBoard";
 import { boardLook, selectWaitingBoards } from "../../config/waitingBoards";
 import { formatCurrency } from "../../utils/formatters";
+import SeeAllModal, { SeeAllFooter } from "../../components/SeeAllModal";
 import { gradeMeta, num } from "../designer/designerMeta";
 
 const pct = (v) => (v === null || v === undefined ? "—" : `${v}%`);
@@ -27,6 +28,7 @@ export default function ManagerHome({ selectedEntity = "all", onNavigate }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showAllTeam, setShowAllTeam] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -59,6 +61,38 @@ export default function ManagerHome({ selectedEntity = "all", onNavigate }) {
   const ach = Number(target.achievement_pct || 0);
   const prog = Number(target.month_progress_pct || 0);
   const onTrack = ach >= prog;
+
+  // Baris tim — dipakai kartu (cuplikan 6) dan pop-up "Lihat semua".
+  const renderTeamRow = (t, base = "manager-home-team") => {
+    const a = Number(t.achievement_pct || 0);
+    return (
+      <div key={t.sales_id} data-testid={`${base}-${t.sales_id}`}
+        className="py-2 text-[11.5px]">
+        <div className="mb-1 flex items-center gap-2">
+          <span className="w-4 text-[10px] font-bold text-[#9A9BA3]">
+            #{t.rank}
+          </span>
+          <span className="min-w-0 flex-1 truncate font-semibold">
+            {t.sales_name}
+          </span>
+          <span className="tabular-nums text-[#6B6B73]">
+            {t.orders_count || 0} pesanan
+          </span>
+          <span className="tabular-nums font-bold text-[#0058CC]">
+            {formatCurrency(t.total_sales || 0)}
+          </span>
+          <span className={`status-pill ${a >= prog ? "pill-success" : "pill-warning"}`}>
+            {t.achievement_pct === null ? "tanpa target" : `${a}%`}
+          </span>
+        </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#EDEFF2]">
+          <div className="h-full rounded-full"
+            style={{ width: `${Math.min(Math.max(a, 0), 100)}%`,
+              background: a >= prog ? "#1B7F4B" : "#B26A00" }} />
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="grid gap-3" data-testid="manager-home">
@@ -298,38 +332,14 @@ export default function ManagerHome({ selectedEntity = "all", onNavigate }) {
                 Belum ada aktivitas penjualan pada periode ini.
               </p>
             ) : (
-              <div className="divide-y divide-[#F4F5F7]" data-testid="manager-home-team">
-                {team.map((t) => {
-                  const a = Number(t.achievement_pct || 0);
-                  return (
-                    <div key={t.sales_id} data-testid={`manager-home-team-${t.sales_id}`}
-                      className="py-2 text-[11.5px]">
-                      <div className="mb-1 flex items-center gap-2">
-                        <span className="w-4 text-[10px] font-bold text-[#9A9BA3]">
-                          #{t.rank}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate font-semibold">
-                          {t.sales_name}
-                        </span>
-                        <span className="tabular-nums text-[#6B6B73]">
-                          {t.orders_count || 0} pesanan
-                        </span>
-                        <span className="tabular-nums font-bold text-[#0058CC]">
-                          {formatCurrency(t.total_sales || 0)}
-                        </span>
-                        <span className={`status-pill ${a >= prog ? "pill-success" : "pill-warning"}`}>
-                          {t.achievement_pct === null ? "tanpa target" : `${a}%`}
-                        </span>
-                      </div>
-                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#EDEFF2]">
-                        <div className="h-full rounded-full"
-                          style={{ width: `${Math.min(Math.max(a, 0), 100)}%`,
-                            background: a >= prog ? "#1B7F4B" : "#B26A00" }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <>
+                <div className="divide-y divide-[#F4F5F7]" data-testid="manager-home-team">
+                  {team.slice(0, 6).map((t) => renderTeamRow(t))}
+                </div>
+                <SeeAllFooter shown={Math.min(6, team.length)} total={team.length}
+                  label="sales" onClick={() => setShowAllTeam(true)}
+                  testId="manager-home-team-see-all" />
+              </>
             )}
           </div>
         </section>
@@ -410,6 +420,16 @@ export default function ManagerHome({ selectedEntity = "all", onNavigate }) {
         kerjanya.
         <TrendingUp size={11} className="ml-auto" />
       </p>
+
+      <SeeAllModal open={showAllTeam} onClose={() => setShowAllTeam(false)}
+        title="Tim Sales — Target vs Capaian"
+        subtitle={`Periode ${data?.period || "—"} — peringkat capaian penagihan`}
+        icon={Users} accent="#0058CC" rows={team}
+        rowText={(t) => t.sales_name || ""}
+        renderRow={(t) => renderTeamRow(t, "manager-home-team-modal")}
+        listClassName="divide-y divide-[#F4F5F7] px-4"
+        searchPlaceholder="Cari nama sales…"
+        testId="manager-home-team-see-all-modal" />
     </div>
   );
 }

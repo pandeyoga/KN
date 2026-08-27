@@ -1,0 +1,37 @@
+{
+  "summary": "Frontend-only regression test of the 'card = preview, popup = everything' UI iteration on 4 screens (Beranda Control Tower, Pusat Persetujuan, Meja Admin Sales, Meja Finance, Dasbor Manajer) using the public preview URL and the prebuilt static bundle (no rebuild needed, build newer than sources). Verified: low-stock preview 6 + SeeAllModal (search + empty state + close), approval-inbox 'Menunggu di layar lain' preview 5 of 16 + modal pagination (1-10 / 11-16 / prev) + search + Esc close + 'Buka layarnya' navigation, main-list pager correctly ABSENT (only 10 filtered items, PAGE_SIZE=15 verified in code), tab switching with page reset, animated Collapse on both desks (card height 289px -> 64px -> 289px, aria-hidden set), and end-to-end write actions (SO Konfirmasi, Terbitkan Faktur Pajak, Manager board Setujui) all succeed with toast + queue/board refresh. Zero console errors on admin/sales-admin/manager screens; 2 pre-existing 403s on Meja Finance. No blocking defects found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/rnd/meta?entity_id=ent_ksc", "issue": "Called twice on Meja Finance for role 'finance' which lacks R&D permission -> two 403 responses and 2 console errors on every finance home load. Pre-existing noise; gate the call by permission."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "VerifyOrderDialog (Meja Admin Sales)", "issue": "Dialog does NOT close on Escape (other overlays use useEscapeClose; SeeAllModal does close on Esc). 'Batal' works. Inconsistent overlay behaviour; also blocks other clicks until manually cancelled.", "selector": "[data-testid=\"verify-dialog\"]", "priority": "LOW"},
+      {"component": "DeskQueueCard rows (Meja Finance 'Uang masuk perlu dicatat')", "issue": "Queue rows keyed/tested by ref_id are NOT unique: fin-desk-row-cust_butik_bali / fin-desk-action-cust_butik_bali render 3x (one per invoice of same customer). Duplicate data-testid makes row actions ambiguous for tests and duplicate React keys (`${ref_type}-${ref_id}`) risk state mismatch; busyRef also disables all sibling rows of the same customer during an action.", "selector": "[data-testid=\"fin-desk-row-cust_butik_bali\"]", "priority": "MEDIUM"},
+      {"component": "DeskQueueCard rows (Meja Admin Sales)", "issue": "Same SO id appears in several queues, so desk-row-{id}/desk-action-{id} are globally duplicated (e.g. desk-row-so_008 in perlu_verifikasi and jatuh_tempo). Not a functional bug (scoped by card works) but Playwright strict-mode selectors need the card prefix — worth noting for future testids.", "selector": "[data-testid=\"desk-row-so_008\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: add useEscapeClose to VerifyOrderDialog for overlay consistency",
+    "Optional: make desk row keys/testids unique (ref_type + ref_id + index or invoice id) — finance uang_masuk currently emits 3 identical testids",
+    "Optional: skip GET /api/rnd/meta for roles without R&D permission to remove 403 console noise on Meja Finance"
+  ],
+  "critical_code_review_comments": [
+    "SeeAllModal correctly resets q/page on open, locks body scroll, and restores it on unmount — verified live.",
+    "ApprovalInbox: PAGE_SIZE=15, PaginationBar rendered only when filtered.length > PAGE_SIZE, setPage(1) on tab change — matches observed behaviour.",
+    "DeskQueueCard row key `${row.ref_type}-${row.ref_id}` is not unique for the finance uang_masuk queue (multiple invoices per customer)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend-only request)", "frontend": "95%"},
+  "seed_data_creation": "No seed created, but write actions mutated demo data during e2e verification: SO-0005 confirmed (moved to 'Siap cetak'), Faktur Pajak KSC/FKT-00004 issued for SO-0004, and special order SORD-260818-0001 APPROVED by manager (the special_order waiting board is now empty). Re-run `python seed_realistic.py && python seed_e9_chain_demo.py` if a pristine demo state is needed.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@/manager@/salesadmin@/finance@kainnusantara.id, password demo12345",
+  "context_for_next_testing_agent": "NOT VERIFIABLE WITH CURRENT SEED (correct behaviour, not bugs): no desk queue and no waiting board has >5 rows, so desk-see-all-{id} / {board}-see-all footers and their modals never appear; manager team has 4 sales (<=6) so manager-home-team-see-all is absent; approval-inbox main list has 10 items (<=15) so approval-inbox-pager-bar is absent. The shared SeeAllModal path itself IS proven via admin-home-lowstock-modal (8 rows) and approval-inbox-others-modal (16 rows, 2 pages). Modal row testids in ApprovalInbox use prefix 'approval-inbox-other-modal-open-{id}' (NOT 'others-modal-open'). Entity badge inside waiting-board rows in 'Semua Entitas' mode could not be observed because the only special-order board row was consumed by the approval test — re-seed and re-check if needed. Frontend is a prebuilt static bundle; run bash /app/scripts/rebuild_frontend.sh after any src change.",
+  "rca_of_the_issue": "No blocking issue. The two console 403s on Meja Finance come from a permission-ungated GET /api/rnd/meta issued by a shared home/meta loader for the finance role; harmless but pollutes the console. The duplicate finance desk testids stem from keying rows by customer ref_id while the queue lists one row per invoice."
+}
