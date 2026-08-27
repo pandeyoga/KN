@@ -149,7 +149,10 @@ async def list_orders(request: Request, status: str = None, customer_id: str = N
     ctx = await entity_ctx(request)
     query = {}
     if status:
-        query["status"] = status
+        # UI/UX 2026-06 — kartu pipeline daftar pesanan menyaring per TAHAP yang
+        # mencakup beberapa status sekaligus; koma = $in.
+        parts = [s.strip() for s in str(status).split(",") if s.strip()]
+        query["status"] = parts[0] if len(parts) == 1 else {"$in": parts}
     if customer_id:
         query["customer_id"] = customer_id
     query = resolve_list_scope("sales_orders", query, ctx, entity_id)

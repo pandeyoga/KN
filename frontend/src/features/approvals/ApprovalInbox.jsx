@@ -460,8 +460,17 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
           onClose={() => setReviewItem(null)}
           onOpenFull={() => { const it = reviewItem; setReviewItem(null); handleReview(it); }}
           onDecided={(msg) => {
-            setReviewItem(null);
-            notifySuccess(msg, "Antrean persetujuan diperbarui.");
+            /* KEPUTUSAN BERUNTUN (2026-06) — dokumen berikutnya dalam saringan yang
+               sama langsung dibuka, supaya antrean habis tanpa klik ekstra. */
+            const cur = reviewItem;
+            const idx = filtered.findIndex((x) => x.kind === cur.kind && x.id === cur.id);
+            const next = filtered.slice(idx + 1).find((x) => !(x.kind === cur.kind && x.id === cur.id))
+              || filtered.slice(0, Math.max(idx, 0)).find((x) => !(x.kind === cur.kind && x.id === cur.id))
+              || null;
+            setReviewItem(next);
+            notifySuccess(msg, next
+              ? `Lanjut ke ${next.title} — dokumen berikutnya di antrean.`
+              : "Antrean saringan ini habis. Kerja bagus!");
             load();
           }} />
       )}

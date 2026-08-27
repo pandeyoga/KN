@@ -137,6 +137,7 @@ function AllFiltersModal({ onClose, facets, setFacets, opts, toggle, activeCount
   useEscapeClose(true, onClose);
   return createPortal(
     <div className="modal-overlay fixed inset-0 z-[120] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:items-center"
+      style={{ zIndex: 120 }}
       data-testid="facet-modal-overlay" {...overlayDismiss(onClose)}>
       <div role="dialog" aria-modal="true" data-testid="facet-modal"
         className="my-auto w-full max-w-xl rounded-xl bg-white shadow-2xl"

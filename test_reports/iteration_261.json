@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 261 verification (backend + frontend). Backend: new pytest file (15 tests, all pass) covering multi-status SO filter (?status=confirmed,partially_picked,picked → $in, union-equality with single-status queries, whitespace/trailing-comma tolerance, unknown status → [], no _id leak, stats/summary consistency, auth gate), sales-return eligibility endpoint (shape: eligible/window_days/deadline/days_remaining/allowed_return_types, 404 unknown order, 422 missing param, auth gate), and PO list/detail sanity. Frontend (public URL, prebuilt bundle): (1) Keputusan beruntun — approving PO-00007 in 'Semua' tab kept the modal OPEN and loaded the NEXT document (Opname Bandung) with toast 'Lanjut ke ...'; deciding the single item in the 'Pesanan Penjualan' tab closed the modal with 'Antrean saringan ini habis'; notes field resets between documents; list reloads. (2) ReturnEligibilityPanel present on ACTIVE return SRET-00001 with deadline + 'lewat 11 hari' and policy warning (single eligibility API call, 200), ABSENT on settled SRET-00003. (3) Orders pipeline — 7 cards show count + Rp; clicking orders-stat-diproses issued ?status=confirmed,partially_picked,picked, list narrowed 9→3 confirmed rows, active ring applied, KNSelect synced to 'Tahap: Diproses (grup)'; orders-stat-total reset to 9. (4) PO compact panel (409px tall, no long scroll) with supplier/gudang/grand total/lifecycle actions; po-open-full-detail opens po-detail-popup portaled to <body>, closable by Esc and X, containing items+progress, rincian harga & pajak, timeline & document flow; 'Setujui PO' worked from compact panel AND from inside the popup (both 200) and the panel refreshed to the new status/actions. Regression: salesadmin decision modal read-only (no approve button, correct hint), POS 'Semua Filter' modal chips + Terapkan clickable (catalog filtered to 1 produk), peta retur link 'Retur Beli ke supplier' navigates, return stepper visible on detail. Only minor/cosmetic issues found; no blocking bugs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PurchaseOrderManagement (handleApprovePO notice)", "issue": "After approving level 1 of a 2-level approval chain (PO-00010, Rp 588jt → Manager + Direksi), the green notice/toast says 'PO disetujui. Inbound task dibuat.' although the PO is still waiting_approval and no inbound task was created (approval_chain level 2 pending). Misleading confirmation.", "selector": "[data-testid='po-mgmt-notice']", "priority": "MEDIUM"},
+      {"component": "POCompactPanel approval hint", "issue": "Hint only reads 'Butuh persetujuan peran ADMIN.' with no chain progress; after level 1 the user cannot tell that 1 of 2 levels is done (backend exposes approval_level_current/approval_levels_total).", "selector": "[data-testid='po-approval-badge']", "priority": "LOW"},
+      {"component": "PODetailPanel (embedded, inside DetailPopup)", "issue": "'Alur Dokumen Terkait' chip still shows WAITING_APPROVAL/AKTIF after the PO was fully approved inside the same popup (flow data not refetched after the lifecycle action); the timeline above it did update.", "selector": "[data-testid='po-detail-popup-body']", "priority": "LOW"},
+      {"component": "DetailPopup + POCompactPanel duplicate testids", "issue": "When the popup is open, data-testid approve-po-button / amend-po-button / cancel-po-button exist twice in the DOM (compact panel + popup) making automated selectors ambiguous; recommend prefixing the popup copies.", "selector": "[data-testid='approve-po-button']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "DetailPopup overlay", "issues": ["Intended stacking z-[120] is overridden by '.modal-overlay { z-index: 60 }' in src/styles/purchasing.css (computed z-index = 60). Visually still on top because the portal appends last, but the documented 'above other layers' guarantee is not actually in effect — use z-[120]! or a dedicated class."]},
+      {"screen": "POS 'Semua Filter' modal", "issues": ["Category/colour/grade chips and the Terapkan/Reset buttons have no data-testid, forcing text-based selectors in tests."]},
+      {"screen": "Decision modal (salesadmin, read-only)", "issues": ["Read-only view shows both 'Detail lengkap tidak dapat dimuat untuk peran Anda' and a red error box 'Anda hanya dapat mengelola pengajuan Anda sendiri' (403 from detail fetch) — noisy for an intentionally read-only state."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter261_pipeline_eligibility.py",
+    "/app/test_reports/pytest/iter261.xml"
+  ],
+  "action_items": [
+    "Make the PO approve notice reflect chain progress instead of always 'PO disetujui. Inbound task dibuat.' (use approval_status/approval_level_current from the response).",
+    "Show approval-chain level (e.g. 'tingkat 2 dari 2') in POCompactPanel's approval hint.",
+    "Refresh the document-flow section inside po-detail-popup after lifecycle actions (currently stale WAITING_APPROVAL chip).",
+    "Give the popup copies of lifecycle buttons distinct data-testids to avoid duplicate testids.",
+    "Fix DetailPopup z-index: '.modal-overlay' (z-index:60) beats the z-[120] utility."
+  ],
+  "critical_code_review_comments": [
+    "ApprovalInbox.onDecided picks the next item from the PRE-reload `filtered` array; when the queue is paginated the next item can be on another page (works today, but note PAGE_SIZE interaction) — behaviour verified correct for current data.",
+    "DetailPopup relies on portal DOM order for stacking because its z-[120] class is dead (overridden by .modal-overlay); make the z-index explicit to avoid future overlay regressions.",
+    "sales_orders_extra.list_orders comma-status parsing is safe (strips blanks, single value stays scalar) — no injection risk, verified by tests."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter261_pipeline_eligibility.py"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% of requested flows functional; 4 minor UI/messaging defects"},
+  "seed_data_creation": "No seed added. Data mutations during testing: PO-00007 approved (approval level via decision popup), SO-0007 'nilai' approval approved, PO-00010 approved through BOTH chain levels (now status=pending/approval_status=approved).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@/manager@/salesadmin@kainnusantara.id · demo12345 · entity via scope-pick-ent_ksc",
+  "context_for_next_testing_agent": "All four iteration-261 features verified working end-to-end. PO-00010 is now fully approved (status 'pending', inbound stage) — pick another waiting_approval PO (KSC/PO-00011/00013/00014/00015, PO-00009) for future approve tests. Approval inbox 'Semua' had 6-7 pending items after this run; PO-00007 & SO-0007 approvals were consumed. Sidebar groups are collapsed by default for admin: click nav-group-toggle-{group} before nav-{item}. Backend regression file: /app/backend/tests/test_iter261_pipeline_eligibility.py.",
+  "rca_of_the_issue": "PO approve notice: PurchaseOrderManagement.handleApprovePO sets a fixed success string regardless of the returned approval_chain state, so a partial (level-1-of-2) approval is reported as a completed approval with inbound tasks. DetailPopup z-index: Tailwind's z-[120] utility and the hand-written .modal-overlay rule have equal specificity, and purchasing.css is emitted after the utility layer in the prebuilt bundle, so z-index:60 wins."
+}

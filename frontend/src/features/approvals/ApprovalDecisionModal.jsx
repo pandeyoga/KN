@@ -350,7 +350,7 @@ export default function ApprovalDecisionModal({ item, currentUser, onClose, onOp
               kepala pop-up, atau buka layar penuh.
             </p>
           )}
-          {err && (
+          {err && allowed && (
             <p className="flex items-start gap-1.5 rounded-lg border border-[#F3C1C1] bg-[#FDF0F0] px-3 py-2 text-[12px] text-[#C62828]"
               data-testid="decision-modal-error">
               <AlertTriangle size={13} className="mt-0.5 shrink-0" /> {err}

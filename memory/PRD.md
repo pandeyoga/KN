@@ -796,3 +796,34 @@ diverifikasi ulang manual (klik tanpa force + navigasi benar).
 - **P3** Standarkan signature `onNavigate` (3 varian di AppViewRouter — sumber bug arity).
 - **P3** Ekstrak komponen Modal ber-portal bersama (tangga z-index satu tempat).
 - **P3** Log kegagalan enrichment harga di GET /sales-returns/{id} (kini diam).
+
+## Sesi 2026-06 (lanjutan-3) — Keputusan beruntun, kelayakan retur, pipeline SO, panel kompak PO
+### Yang dikerjakan
+- **Keputusan beruntun** (`ApprovalInbox.onDecided`) — setelah Setujui/Tolak, pop-up
+  langsung memuat dokumen BERIKUTNYA dalam saringan yang sama; antrean habis →
+  pop-up tutup + toast "Antrean saringan ini habis".
+- **Kelayakan retur tampak** (`ReturnEligibilityPanel.jsx`) — panel di detail retur
+  (status aktif saja): dalam/di luar jendela, deadline + sisa/lewat hari, biaya
+  restocking, tipe yang diizinkan, peringatan kebijakan. Sumber
+  `GET /sales-return-policies/eligibility` (mesin yang sama dengan penjaga R0).
+- **Pipeline daftar pesanan (SO)** (`OrdersView`) — 7 kartu ringkasan jadi PIPELINE
+  yang bisa diklik + NILAI Rp per tahap (`by_status.total_amount`); filter multi-status
+  via koma (backend `sales_orders_extra.list_orders` → `$in`); KNSelect diberi opsi grup.
+- **Panel kompak + pop-up detail PO** — `POCompactPanel.jsx` (fakta kunci, progress
+  terima agregat, aksi sesuai lifecycle) + `DetailPopup.jsx` (cangkang portal z-120,
+  dipakai ulang) berisi `PODetailPanel` mode `embedded` (testid aksi berprefix `popup-`).
+  Pola "panel samping = ringkas, pop-up = lengkap" siap dipakai layar lain.
+- Perbaikan dari agen uji: notice approve PO kini sadar RANTAI (tingkat X dari Y, tidak
+  lagi bilang "inbound task dibuat" saat masih menunggu tingkat 2); hint rantai di panel
+  kompak; z-index DetailPopup/FacetModal via inline style (`.modal-overlay` z:60 menang
+  dari utility); pop-up keputusan mode read-only tak lagi menampilkan kotak error 403 ganda.
+### Verifikasi
+Agen uji `iteration_261`: backend **15/15 PASS** (`test_iter261_pipeline_eligibility.py`);
+frontend 100% flow lulus (beruntun → dokumen berikutnya + toast "Lanjut ke…", eligibility
+di SRET-00001 "lewat 11 hari" & absen di retur settled, pipeline 9→3 baris, panel kompak
+409px + pop-up portal + Setujui PO dari kompak & pop-up dua-duanya jalan). 4 temuan minor
+diperbaiki setelahnya (notice rantai, z-index, testid ganda, error ganda read-only).
+### Backlog berikutnya
+- **P3** Chip "Alur Dokumen Terkait" dalam pop-up PO tidak ikut refresh setelah aksi.
+- **P3** Terapkan pola kompak+pop-up ke `OrderDetailPanel` (panel kanan SO masih panjang).
+- **P3** Tambah data-testid pada chip modal filter POS.

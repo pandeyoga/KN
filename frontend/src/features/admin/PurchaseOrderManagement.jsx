@@ -6,6 +6,8 @@ import { formatCurrency } from "../../utils/formatters";
 import { getStatusBadge } from "./po/poUtils";
 import POCreateForm from "./po/POCreateForm";
 import PODetailPanel from "./po/PODetailPanel";
+import POCompactPanel from "./po/POCompactPanel";
+import DetailPopup from "../../components/DetailPopup";
 import POAmendModal from "./po/POAmendModal";
 import MakloonOrderCreateModal from "../purchasing/MakloonOrderCreateModal";
 import ConfirmModal from "../../components/ConfirmModal";
@@ -55,6 +57,7 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
   const [makloonMode, setMakloonMode] = useState(null);  // null | "buy_process" | "process_only"
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
+  const [showFullDetail, setShowFullDetail] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
@@ -199,7 +202,18 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
   const handleApprovePO = async (poId) => {
     if (!onApprovePO) return;
     const result = await onApprovePO(poId);
-    if (result) { setNotice("PO disetujui. Inbound task dibuat."); await fetchPOs(); await handleViewDetail(poId); }
+    if (result) {
+      // Rantai approval bisa bertingkat — jangan bilang "inbound task dibuat"
+      // sebelum SELURUH tingkat setuju (dulu tingkat 1 dari 2 pun dilaporkan selesai).
+      const po = result?.data || result;
+      const stillWaiting = (po?.status || "") === "waiting_approval";
+      const chain = Array.isArray(po?.approval_chain) ? po.approval_chain : [];
+      const approvedLv = chain.filter((l) => l.status === "approved").length;
+      setNotice(stillWaiting
+        ? `Disetujui tingkat ${approvedLv || 1} dari ${chain.length || "?"} — masih menunggu peran ${(po?.required_approval_role || "berikutnya").toUpperCase()}.`
+        : "PO disetujui penuh. Inbound task dibuat.");
+      await fetchPOs(); await handleViewDetail(poId);
+    }
   };
 
   const handleCloseShort = (poId) => {
@@ -377,18 +391,37 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
           </div>
         </div>
 
-        {/* PO Detail Panel */}
-        <PODetailPanel
+        {/* UI/UX 2026-06 — panel kanan = RINGKASAN + aksi lifecycle (tanpa scroll);
+            isi lengkap (item, pajak, penagihan, timeline, referensi) di pop-up. */}
+        <POCompactPanel
           po={selectedPO}
           currentUser={user}
           onClose={() => setSelectedPO(null)}
+          onOpenFull={() => setShowFullDetail(true)}
           onApprove={handleApprovePO}
           onCancel={handleCancelPO}
           onCloseShort={handleCloseShort}
           onAmend={(po) => { setError(""); setAmendPO(po); }}
-          onOpenDocument={onOpenDocument}
         />
       </div>
+
+      <DetailPopup open={showFullDetail && !!selectedPO} onClose={() => setShowFullDetail(false)}
+        title={selectedPO?.po_number} subtitle={selectedPO?.supplier_name}
+        testId="po-detail-popup">
+        {selectedPO && (
+          <PODetailPanel
+            po={selectedPO}
+            currentUser={user}
+            embedded
+            onClose={() => setShowFullDetail(false)}
+            onApprove={handleApprovePO}
+            onCancel={handleCancelPO}
+            onCloseShort={handleCloseShort}
+            onAmend={(po) => { setShowFullDetail(false); setError(""); setAmendPO(po); }}
+            onOpenDocument={onOpenDocument}
+          />
+        )}
+      </DetailPopup>
 
       {makloonMode && (
         <MakloonOrderCreateModal

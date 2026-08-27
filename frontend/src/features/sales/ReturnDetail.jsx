@@ -13,6 +13,7 @@ import ReturnSettleModal from "./ReturnSettleModal";
 import ReturnQuarantinePanel from "./ReturnQuarantinePanel";
 import ReturnChainPanel from "./ReturnChainPanel";
 import ReturnJourneyPanel from "./ReturnJourneyPanel";   // FASE I.F — keluhan + milestone
+import ReturnEligibilityPanel from "./ReturnEligibilityPanel"; // 2026-06 — jendela retur tampak
 import DocumentActionsBar from "../documents/DocumentActionsBar";
 import QtyDual from "../../components/QtyDual";      // FASE U — dua satuan
 
@@ -212,6 +213,9 @@ export default function ReturnDetail({
 
       {/* UI/UX 2026-06 — SEDANG DI MANA dokumen ini & APA langkah berikutnya. */}
       <ReturnStepper status={ret.status} />
+
+      {/* Kelayakan kebijakan retur — tampil sebelum keputusan diambil. */}
+      <ReturnEligibilityPanel ret={ret} />
 
       {/* FASE I.F — sebab keluhan (master) + perjalanan retur (lembar pemilik).
           Ditaruh SEBELUM panel inspeksi 4-point karena itulah urutan kerjanya:

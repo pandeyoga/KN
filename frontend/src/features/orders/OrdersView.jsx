@@ -172,21 +172,36 @@ export default function OrdersView({
       
       {viewMode === "list" && (
         <>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7" data-testid="orders-pipeline">
+            {/* UI/UX 2026-06 — kartu ringkasan = PIPELINE yang bisa diklik (menyaring
+                daftar per tahap, multi-status via koma) + NILAI rupiah per tahap. */}
             {[
-              { label: "Total", value: stats.total, color: "text-[#007AFF]", bg: "bg-[#EFF4FF]" },
-              { label: "Dipesan", value: stats.reserved, color: "text-[#FF9500]", bg: "bg-orange-50" },
-              { label: "Backorder", value: stats.backorder, color: "text-[#B23B14]", bg: "bg-[#FFF1EA]" },
-              { label: "Diproses", value: stats.confirmed, color: "text-[#34C759]", bg: "bg-green-50" },
-              { label: "Dikirim", value: stats.shipped, color: "text-[#0058CC]", bg: "bg-[#EAF2FF]" },
-              { label: "Selesai", value: stats.done, color: "text-[#5856D6]", bg: "bg-purple-50" },
-              { label: "Dibatalkan", value: stats.cancelled, color: "text-red-500", bg: "bg-red-50" },
-            ].map(({ label, value, color, bg }) => (
-              <div key={label} data-testid={`orders-stat-${label.toLowerCase()}`} className={`rounded-lg border border-[#EFF0F2] p-2.5 ${bg}`}>
-                <p className="text-[9px] font-bold uppercase tracking-wide text-[#6B6B73]">{label}</p>
-                <p className={`text-[20px] font-bold leading-tight ${color}`}>{value}</p>
-              </div>
-            ))}
+              { label: "Total", value: stats.total, color: "text-[#007AFF]", bg: "bg-[#EFF4FF]", st: "all", keys: [] },
+              { label: "Dipesan", value: stats.reserved, color: "text-[#FF9500]", bg: "bg-orange-50", st: "reserved,waiting_approval,approved", keys: ["reserved", "waiting_approval", "approved"] },
+              { label: "Backorder", value: stats.backorder, color: "text-[#B23B14]", bg: "bg-[#FFF1EA]", st: "waiting_stock", keys: ["waiting_stock"] },
+              { label: "Diproses", value: stats.confirmed, color: "text-[#34C759]", bg: "bg-green-50", st: "confirmed,partially_picked,picked", keys: ["confirmed", "partially_picked", "picked"] },
+              { label: "Dikirim", value: stats.shipped, color: "text-[#0058CC]", bg: "bg-[#EAF2FF]", st: "partially_shipped,shipped,dispatched", keys: ["partially_shipped", "shipped", "dispatched"] },
+              { label: "Selesai", value: stats.done, color: "text-[#5856D6]", bg: "bg-purple-50", st: "done", keys: ["done"] },
+              { label: "Dibatalkan", value: stats.cancelled, color: "text-red-500", bg: "bg-red-50", st: "cancelled", keys: ["cancelled"] },
+            ].map(({ label, value, color, bg, st, keys }) => {
+              const amt = keys.length === 0
+                ? Object.values(byStatus).reduce((s, v) => s + Number(v?.total_amount || 0), 0)
+                : keys.reduce((s, k) => s + Number(byStatus[k]?.total_amount || 0), 0);
+              const active = statusFilter === st;
+              return (
+                <button key={label} type="button" data-testid={`orders-stat-${label.toLowerCase()}`}
+                  onClick={() => setStatusFilter(st)}
+                  title={`Saring daftar: ${label}`}
+                  className={`rounded-lg border p-2.5 text-left transition-colors ${bg} ${
+                    active ? "border-[#007AFF] ring-1 ring-[#007AFF]" : "border-[#EFF0F2] hover:border-[#B9CFF2]"}`}>
+                  <p className="text-[9px] font-bold uppercase tracking-wide text-[#6B6B73]">{label}</p>
+                  <p className={`text-[20px] font-bold leading-tight ${color}`}>{value}</p>
+                  <p className="mt-0.5 truncate text-[10px] font-semibold tabular-nums text-[#6B6B73]">
+                    {formatCurrency(amt)}
+                  </p>
+                </button>
+              );
+            })}
           </div>
           
           <LineFilter value={lineFilter} onChange={setLineFilter} storageKey="orders"
@@ -222,6 +237,9 @@ export default function OrdersView({
                   onValueChange={setStatusFilter}
                   options={[
                     { value: "all", label: `Semua Status (${stats.total})` },
+                    { value: "reserved,waiting_approval,approved", label: "Tahap: Dipesan (grup)" },
+                    { value: "confirmed,partially_picked,picked", label: "Tahap: Diproses (grup)" },
+                    { value: "partially_shipped,shipped,dispatched", label: "Tahap: Dikirim (grup)" },
                     { value: "waiting_approval", label: "Menunggu Persetujuan" },
                     { value: "waiting_stock", label: "Menunggu Stok (Backorder)" },
                     { value: "reserved", label: "Dipesan" },

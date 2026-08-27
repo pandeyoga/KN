@@ -19,7 +19,7 @@ import QtyDual from "../../../components/QtyDual";      // FASE U — dua satuan
  *
  * Props: po, currentUser, onClose, onApprove, onCancel, onCloseShort, onAmend
  */
-export default function PODetailPanel({ po, currentUser, onClose, onApprove, onCancel, onCloseShort, onAmend, onOpenDocument }) {
+export default function PODetailPanel({ po, currentUser, onClose, onApprove, onCancel, onCloseShort, onAmend, onOpenDocument, embedded = false }) {
   if (!po) {
     return (
       <div className="section-card flex items-center justify-center min-h-[200px] border-dashed">
@@ -32,6 +32,8 @@ export default function PODetailPanel({ po, currentUser, onClose, onApprove, onC
   }
 
   const canManage = ["admin", "manager"].includes(currentUser?.role);
+  // Testid unik saat panel dirender DI DALAM pop-up (kompak + pop-up bisa tampil bersamaan).
+  const tp = embedded ? "popup-" : "";
   const goodsReceived = ["receiving", "partial", "completed", "closed_short"].includes(po.status);
   const amendable = ["waiting_approval", "pending", "receiving", "partial"].includes(po.status);
   const version = Number(po.version || 1);
@@ -46,7 +48,8 @@ export default function PODetailPanel({ po, currentUser, onClose, onApprove, onC
     : { label: "Tertagih Sebagian", cls: "bg-amber-50 text-amber-700 border border-amber-200" };
 
   return (
-    <div className="section-card self-start" data-testid="po-detail-panel">
+    <div className={embedded ? "" : "section-card self-start"} data-testid="po-detail-panel">
+      {!embedded && (
       <div className="section-head">
         <div className="min-w-0">
           <p className="text-[10px] font-bold uppercase text-[#0058CC]">{po.po_number}</p>
@@ -62,6 +65,18 @@ export default function PODetailPanel({ po, currentUser, onClose, onApprove, onC
         </div>
         <button className="icon-button" onClick={onClose}><XCircle size={14} /></button>
       </div>
+      )}
+      {embedded && (
+        <div className="mb-2 flex items-center gap-1.5">
+          {getStatusBadge(po.status)}
+          {version > 1 && (
+            <span data-testid="po-version-badge" className="rounded bg-[#F3E8FF] px-1.5 py-0.5 text-[10px] font-semibold text-[#6B219A]">v{version}</span>
+          )}
+          {goodsReceived && (
+            <span data-testid="po-billing-badge" className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${billState.cls}`}>{billState.label}</span>
+          )}
+        </div>
+      )}
 
       <div className="section-body space-y-3">
         <DocumentActionsBar docType="purchase_order" sourceId={po.id} entityId={po.entity_id}
@@ -248,29 +263,29 @@ export default function PODetailPanel({ po, currentUser, onClose, onApprove, onC
         {/* Actions */}
         <div className="flex flex-col gap-1.5">
           {amendable && canManage && (
-            <button data-testid="amend-po-button" onClick={() => onAmend?.(po)} className="secondary-button justify-center">
+            <button data-testid={`${tp}amend-po-button`} onClick={() => onAmend?.(po)} className="secondary-button justify-center">
               <FileEdit size={13} /> Revisi / Amandemen PO
             </button>
           )}
           {po.status === "waiting_approval" && canManage && (
-            <button data-testid="approve-po-button" onClick={() => onApprove(po.id)} className="primary-button justify-center">
+            <button data-testid={`${tp}approve-po-button`} onClick={() => onApprove(po.id)} className="primary-button justify-center">
               <CheckCircle size={13} /> Setujui PO
             </button>
           )}
           {["receiving", "partial", "pending"].includes(po.status) && canManage && (
-            <button data-testid="close-po-button" onClick={() => onCloseShort(po.id)} className="secondary-button justify-center">
+            <button data-testid={`${tp}close-po-button`} onClick={() => onCloseShort(po.id)} className="secondary-button justify-center">
               <Ban size={13} /> Tutup PO (Kurang)
             </button>
           )}
           {po.status === "completed" && (
-            <button data-testid="view-receiving-goods-doc"
+            <button data-testid={`${tp}view-receiving-goods-doc`}
               onClick={() => window.open(`/api/inbound/po/${po.id}/receiving-goods-document`, "_blank")}
               className="secondary-button justify-center">
               <FileText size={13} /> Dokumen Goods Receipt
             </button>
           )}
           {["waiting_approval", "pending"].includes(po.status) && canManage && (
-            <button data-testid="cancel-po-button" onClick={() => onCancel(po.id)} className="danger-button justify-center">
+            <button data-testid={`${tp}cancel-po-button`} onClick={() => onCancel(po.id)} className="danger-button justify-center">
               Batalkan PO
             </button>
           )}
