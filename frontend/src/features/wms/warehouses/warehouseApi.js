@@ -28,6 +28,30 @@ export const deactivateWarehouse = (id) =>
 export const warehouseOccupancy = (id) =>
   axios.get(`${API}/warehouses/${id}/occupancy`).then((r) => r.data);
 
+/* ── FASE R0 — lokasi (site), profil gedung, seed blueprint ────────────────── */
+export const listSites = () =>
+  axios.get(`${API}/warehouse-sites`).then((r) => r.data.sites || []);
+
+export const createSite = (payload) =>
+  axios.post(`${API}/warehouse-sites`, payload).then((r) => r.data);
+
+export const deleteSite = (id) =>
+  axios.delete(`${API}/warehouse-sites/${id}`).then((r) => r.data);
+
+export const seedBlueprint = () =>
+  axios.post(`${API}/warehouse-sites/seed-blueprint`).then((r) => r.data);
+
+export const listCategories = () =>
+  axios.get(`${API}/product-categories`).then((r) => r.data || []);
+
+export const WH_ROLES = [
+  { key: "transit", label: "Transit" },
+  { key: "storage", label: "Penyimpanan" },
+  { key: "return", label: "Retur" },
+  { key: "staging", label: "Staging" },
+  { key: "central_inbound", label: "Penerimaan Pusat" },
+];
+
 /** Pesan galat yang layak dibaca (jangan pernah menampilkan "[object Object]"). */
 export const errText = (e, fallback = "Terjadi kesalahan.") => {
   const d = e?.response?.data?.detail;

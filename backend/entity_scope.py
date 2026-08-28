@@ -36,6 +36,11 @@ SCOPE_FIELD: Dict[str, Optional[str]] = {
     # (bukan `entity_id`). Tanpa ini registry salah field dan gate ikut salah menilai.
     "rfid_tags": "owner_entity_id",
     "rfid_reads": "owner_entity_id",
+    # FASE R1/R2 — print job, verifikasi & putaway order mengikuti pemilik roll
+    "rfid_print_jobs": "owner_entity_id",
+    "rfid_verify_sessions": "owner_entity_id",
+    "putaway_orders": "owner_entity_id",
+    "warehouse_sites": SHARED,
     # SHARED / global (tidak di-scope)
     "uoms": SHARED,
     # FASE E-4 (E4.1) — `warehouses` TETAP SHARED dengan sengaja. Pembatasan

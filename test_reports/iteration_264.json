@@ -1,0 +1,48 @@
+{
+  "summary": "RETEST TERFOKUS perbaikan bug iteration_263 (WMS/RFID R2). Backend: 6 test pytest baru (self-seeding) → 6/6 PASS: (1) GET /api/putaway-orders/suggest kini grade-aware — setiap grup punya field `grade`, roll tidak tercampur antar-grade, grup grade A TIDAK mendapat kandidat 'Gedung Retur', dan setelah 1 roll di-set grade B via mongo (lalu DIKEMBALIKAN) grup grade B MENDAPAT kandidat 'Gedung Retur'; (2) resolve-exception aksi 'bogus_action' → 400 dengan pesan accept/return_transit dan NOL mutasi (status PA + status setiap item identik sebelum/sesudah), roll_ids tak dikenal + aksi valid → 404; (3) regresi confirm-arrival bulk_write: PA baru 1 roll → dispatch → confirm semua EPC → status completed, BTG terbit, roll pindah gudang + journey 'stored', tag RFID ikut pindah, movement pasangan out/in (jumlah 0), inventory_balances.on_hand_qty kedua sisi = proyeksi rolls. Frontend (Playwright, viewport 1920x1080, login admin + entitas KSC): FE HIGH FIX TERVERIFIKASI — alur ?view=cs-rfid-tags → rfid-tab-print → buat print job → Tandai Tercetak → Mulai Verifikasi → Simulasi Scan Semua → Selesaikan Verifikasi menampilkan data-testid rfid-verify-result dengan teks '✓ BERSIH — semua tag cocok dengan job' dan panel TETAP tampil pada t=1.5s / 3.5s / 6.5s. FE kosmetik PA TERVERIFIKASI (?view=wms-locations → lp-warehouse=Gudang Jakarta Utara → lp-tab-pa): grup saran menampilkan badge 'Grade A' / 'Grade A1' + satuan '1 roll · 150 yard', baris PA menampilkan BTG + satuan. FE LOW FIX GAGAL: flash() masih tidak mereset timer lama.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/putaway-orders/{id}/confirm-arrival",
+        "issue": "set_journey menimpa stage saja sehingga field lama tetap menempel: roll yang akhirnya 'stored' masih menyimpan journey.exception_reason = 'EPC tidak terbaca saat konfirmasi tiba' dari siklus sebelumnya (terlihat pada roll PA00009). Kosmetik/data-hygiene: sebaiknya unset exception_reason ketika stage menjadi stored."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "RfidPrintVerifyPanel — flash()",
+        "issue": "FE LOW FIX TIDAK EFEKTIF. Pengukuran: klik CROSS-DOCK (t=0) → klik SIMPAN (t=+0.8s) → notice 'Roll ditandai SIMPAN' hilang pada t=+3.0s dari klik CROSS-DOCK, yaitu hanya ~2.2s setelah klik SIMPAN (bukan 3s). RCA: `const flash = (m) => {...}` didefinisikan di dalam body komponen, jadi setiap render menghasilkan OBJEK FUNGSI BARU; `flash._t` yang di-set pada render sebelumnya tidak terbaca oleh closure baru sehingga clearTimeout(flash._t) selalu no-op (flash._t === undefined) dan timer 3s dari pesan pertama tetap jalan. Perbaikan: simpan timer di useRef (const flashT = useRef(null)) atau variabel module-scope, lalu clearTimeout(flashT.current) sebelum setTimeout.",
+        "selector": "[data-testid=\"rfid-print-msg\"], [data-testid=\"rfid-routing-crossdock\"], [data-testid=\"rfid-routing-store\"]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter264_putaway_fixes.py",
+    "/app/test_reports/pytest/iter264_results.xml"
+  ],
+  "action_items": [
+    "Ganti mekanisme timer flash() di RfidPrintVerifyPanel.jsx (dan panel lain yang meniru pola `fn._t`) dengan useRef agar clearTimeout benar-benar membatalkan timer lama; lalu rebuild frontend (bash /app/scripts/rebuild_frontend.sh)",
+    "Opsional (kosmetik data): bersihkan journey.exception_reason ketika roll berpindah ke stage 'stored'"
+  ],
+  "critical_code_review_comments": [
+    "Pola `flash._t` pada fungsi yang dideklarasikan ulang tiap render adalah anti-pattern React — property disimpan pada objek fungsi yang dibuang setiap render; gunakan useRef.",
+    "suggest() sekarang grade-aware dan konsisten dengan enforcement create_order (check_storage_rules dipanggil dengan grade grup) — sudah benar. Catatan: grade dinormalisasi .upper() sehingga nilai seperti 'A1' membentuk grup terpisah (perilaku wajar, bukan bug).",
+    "resolve_exception memvalidasi action sebelum iterasi item → tidak ada mutasi parsial. Sudah benar.",
+    "confirm_arrival bulk_write: rebuild_balance masih dijalankan berurutan per (product, warehouse) — untuk PA ratusan roll pertimbangkan batching, namun bukan blocker."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter264_putaway_fixes.py (baru)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "75% (3 dari 4 item: verify-result OK, badge grade+satuan OK, PA panel OK, flash timer GAGAL)"},
+  "seed_data_creation": "Retire 2 tag RFID aktif (E27B-F012-78BD-AC44-2C9C-323D, E2A9-B202-22B4-D142-EA85-1D57) agar roll RL-00038 & RL-00043 jadi untagged untuk uji layar; lalu print job PJ00011 dibuat + diverifikasi lewat UI (rolls kembali ber-tag EPC baru). Backend test membuat PA baru (PA00010) + print job seed; grade satu roll diubah sementara ke 'B' lalu DIKEMBALIKAN (diverifikasi ulang oleh test).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@kainnusantara.id / demo12345, header X-Entity-Id: ent_ksc",
+  "context_for_next_testing_agent": "Suite terfokus: /app/backend/tests/test_iter264_putaway_fixes.py (jalankan `pytest tests/test_iter264_putaway_fixes.py -n 0`; self-seeding: fixture transit_wh akan retire tag + buat/verifikasi print job bila tidak ada roll siap-putaway). Untuk uji layar RFID Print & Verifikasi, kandidat roll bisa habis — retire beberapa tag aktif dulu (DELETE /api/rfid/tags/{id}) agar 'Roll Siap Cetak Tag' terisi. Panel PA hanya berisi data bila lp-warehouse diarahkan ke Gudang Jakarta Utara (wh_jakarta) — default 'Gedung Knitting' kosong (bukan bug). Sisa bug terbuka: timer flash() di RfidPrintVerifyPanel.",
+  "rca_of_the_issue": "flash() gagal mereset notice karena timer disimpan sebagai property pada objek fungsi (`flash._t`) yang dibuat ulang setiap render React; closure render berikutnya melihat flash._t === undefined sehingga clearTimeout tidak membatalkan timer pesan sebelumnya. Reproduksi: buka job terverifikasi di rfid-tab-print → klik rfid-routing-crossdock → dalam <1s klik rfid-routing-store → rfid-print-msg hilang tepat 3s setelah klik PERTAMA."
+}

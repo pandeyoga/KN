@@ -529,6 +529,8 @@ class GRCompletePayload(BaseModel):
     grade: str = ""
     rolls: List[GRRollLine] = []
     variance_override_reason: str = ""
+    # FASE R0 — nomor surat jalan SUPPLIER (dicocokkan dengan SJ fisik pengirim)
+    supplier_dn: str = ""
     # FASE C (D-10/D-26/D-27) — titik input LOT saat penerimaan.
     # `supplier_lot` = nomor lot versi supplier; `lot_number` opsional untuk
     # menempelkan penerimaan ini ke lot yang SUDAH ada (mis. sisa kiriman batch sama).

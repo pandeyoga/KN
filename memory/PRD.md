@@ -827,3 +827,54 @@ diperbaiki setelahnya (notice rantai, z-index, testid ganda, error ganda read-on
 - **P3** Chip "Alur Dokumen Terkait" dalam pop-up PO tidak ikut refresh setelah aksi.
 - **P3** Terapkan pola kompak+pop-up ke `OrderDetailPanel` (panel kanan SO masih panjang).
 - **P3** Tambah data-testid pada chip modal filter POS.
+
+---
+## FASE R0+R1+R2 — Revamp WMS/RFID Tahap 1 (2026-06 · iteration_263/264)
+### Konteks
+Analisis lengkap WMS/RFID vs kebutuhan user (Chainway UR300 + handheld + printer RFID,
+2 gate in/out, gudang multi-site) tersimpan di `/app/memory/WMS_RFID_ANALYSIS.md`
+(fakta lapangan MENGIKAT di bagian G: peta gudang Rancamalang 5 gedung / Soreang /
+Jakarta, rules kategori dari master ERP, gudang retur berbasis grade, cross-dock
+keputusan admin, volume ribuan roll/hari, EPC custom).
+### Yang dibangun
+- **R0 Fondasi**: `warehouse_sites` (lokasi) + field gudang `site_id/roles[]/
+  storage_rules{mode: none|category|grade}/gate_config{physical_gate}` — semua
+  configurable via drawer Profil di Master Gudang; seed blueprint idempoten
+  (`POST /warehouse-sites/seed-blueprint`) membuat 3 site + RCM-TRANSIT/WOVEN/
+  KNITTING/PRINTING/RETUR + SRG-01, wh_jakarta dipetakan handheld-only.
+  `inventory_rolls.journey{stage,routing}` (terpisah dari status bucket stok = SSOT
+  aman) di-stamp `received_transit` saat GR; `supplier_dn` di GRCompletePayload.
+- **R1 Print & Verify**: `rfid_print_jobs` (PJ-xxx, ZPL dengan ^RFW,H untuk printer
+  RFID; endpoint /rfid/print-jobs [+/zpl, mark-printed]) + `rfid_verify_sessions`
+  (expected vs scanned, missing/extra; verify/start → scan → complete) + routing
+  `POST /rfid/rolls/set-routing` (store|cross_dock, keputusan admin). UI: tab
+  "Print & Verifikasi" di layar RFID Tags (`RfidPrintVerifyPanel.jsx`).
+- **R2 Putaway Order + BTG**: `putaway_orders` (PA-xxx) — suggest per (owner ×
+  kategori × grade) dengan kandidat gudang ber-rules-match (grade-aware), create
+  dengan ENFORCEMENT storage_rules (Retur tolak grade A dst), dispatch, confirm-
+  arrival dengan validasi EPC (bulk_write; item tak terbaca → exception, sisanya
+  masuk + BTG terbit), resolve-exception (accept|return_transit, validasi sebelum
+  mutasi). Perpindahan antar-gedung: roll.warehouse_id + movements pasangan +
+  rebuild_balance dua sisi. UI: tab "Putaway Order (Antar Gedung)" di layar
+  Lokasi Gudang (`PutawayOrdersPanel.jsx`).
+### File kunci
+BE: services/warehouse_profile_service.py, rfid_print_service.py,
+putaway_order_service.py; routers/warehouse_sites.py, putaway_orders.py, rfid.py
+(bagian bawah), warehouses.py (PATCH profil), inbound_receiving.py (journey).
+FE: wms/warehouses/{WarehouseMasterView,WarehouseProfileDrawer,warehouseApi},
+rfid/{RfidPrintVerifyPanel,RfidTagsView}, wms/{PutawayOrdersPanel,LocationPutawayView}.
+PENTING: frontend = STATIC BUILD → `bash /app/scripts/rebuild_frontend.sh` setelah edit.
+### Verifikasi
+iteration_263: backend 30/30 PASS + frontend 90% → semua temuan diperbaiki.
+iteration_264 (retest): backend 6/6 PASS, verify-result panel & grade badge OK;
+flash timer diperbaiki terakhir dengan useRef + journey.exception_reason di-unset
+saat stored/tag_verified (pytest 6/6 ulang PASS setelah fix).
+### Backlog WMS/RFID berikutnya (roadmap disetujui user)
+- **R3** Gate live: ingest API device (X-Device-Key), gate session + manifest,
+  layar kiosk monitor per gate, checker exception di ERP → setelah ini serahkan
+  dokumentasi API middleware ke Kotlin developer user.
+- **R4** Outbound penuh: picking per gudang → gate-out → staging transit → final
+  loading check vs SO.
+- **R5** Retur fisik multi-leg + gedung retur + print tag baru utk retur + Jejak
+  Barang (timeline roll lintas dokumen).
+- **R6** Alarm/shrinkage/heartbeat/cycle count RFID. **R7** Fulfillment Wizard (S1–S8).

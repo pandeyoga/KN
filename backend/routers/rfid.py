@@ -54,6 +54,19 @@ class ReaderScanPayload(BaseModel):
     device_id: str
 
 
+class PrintJobPayload(BaseModel):
+    roll_ids: list[str]
+
+
+class VerifyScanPayload(BaseModel):
+    epcs: list[str]
+
+
+class RoutingPayload(BaseModel):
+    roll_ids: list[str]
+    routing: str  # store | cross_dock
+
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 @router.get("/rfid/summary")
 async def get_summary(request: Request, warehouse_id: Optional[str] = None,
@@ -195,3 +208,94 @@ async def get_locations(request: Request, warehouse_id: Optional[str] = None,
     scope = resolve_scope_ids(ctx, entity_id)
     items = await rfid.rfid_locations(scope, warehouse_id)
     return {"count": len(items), "items": items}
+
+
+# ─── FASE R1 — Print Jobs & Verifikasi ───────────────────────────────────────
+@router.get("/rfid/print-jobs")
+async def get_print_jobs(request: Request, warehouse_id: Optional[str] = None,
+                         status: Optional[str] = None, entity_id: Optional[str] = None) -> Dict[str, Any]:
+    await require_permission(request, "wms", "view")
+    ctx = await entity_ctx(request)
+    from services import rfid_print_service as rps
+    jobs = await rps.list_print_jobs(resolve_scope_ids(ctx, entity_id), warehouse_id, status)
+    return {"count": len(jobs), "jobs": jobs}
+
+
+@router.post("/rfid/print-jobs")
+async def post_print_job(payload: PrintJobPayload, request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "scan")
+    ctx = await entity_ctx(request)
+    from services import rfid_print_service as rps
+    job = await rps.create_print_job(payload.roll_ids, resolve_scope_ids(ctx, None), actor["name"])
+    await audit(actor["name"], "rfid_print_job_created", "rfid_print_job", job["id"],
+                {"job_number": job["job_number"], "items": job["item_count"]})
+    return job
+
+
+@router.get("/rfid/print-jobs/{job_id}")
+async def get_print_job(job_id: str, request: Request) -> Dict[str, Any]:
+    await require_permission(request, "wms", "view")
+    ctx = await entity_ctx(request)
+    from services import rfid_print_service as rps
+    return await rps.get_print_job(job_id, resolve_scope_ids(ctx, None))
+
+
+@router.get("/rfid/print-jobs/{job_id}/zpl")
+async def get_print_job_zpl(job_id: str, request: Request):
+    await require_permission(request, "wms", "view")
+    ctx = await entity_ctx(request)
+    from fastapi.responses import PlainTextResponse
+    from services import rfid_print_service as rps
+    job = await rps.get_print_job(job_id, resolve_scope_ids(ctx, None))
+    return PlainTextResponse(rps.job_zpl(job), headers={
+        "Content-Disposition": f"attachment; filename={job.get('job_number', job_id)}.zpl"})
+
+
+@router.post("/rfid/print-jobs/{job_id}/mark-printed")
+async def post_mark_printed(job_id: str, request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "scan")
+    ctx = await entity_ctx(request)
+    from services import rfid_print_service as rps
+    job = await rps.mark_printed(job_id, resolve_scope_ids(ctx, None))
+    await audit(actor["name"], "rfid_print_job_printed", "rfid_print_job", job_id, {})
+    return job
+
+
+@router.post("/rfid/print-jobs/{job_id}/verify/start")
+async def post_verify_start(job_id: str, request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "scan")
+    ctx = await entity_ctx(request)
+    from services import rfid_print_service as rps
+    return await rps.start_verify(job_id, resolve_scope_ids(ctx, None), actor["name"])
+
+
+@router.post("/rfid/verify-sessions/{session_id}/scan")
+async def post_verify_scan(session_id: str, payload: VerifyScanPayload, request: Request) -> Dict[str, Any]:
+    await require_permission(request, "wms", "scan")
+    ctx = await entity_ctx(request)
+    from services import rfid_print_service as rps
+    return await rps.scan_verify(session_id, payload.epcs, resolve_scope_ids(ctx, None))
+
+
+@router.post("/rfid/verify-sessions/{session_id}/complete")
+async def post_verify_complete(session_id: str, request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "scan")
+    ctx = await entity_ctx(request)
+    from services import rfid_print_service as rps
+    sess = await rps.complete_verify(session_id, resolve_scope_ids(ctx, None))
+    await audit(actor["name"], "rfid_verify_completed", "rfid_verify_session", session_id,
+                {"result": sess.get("result"), "missing": len(sess.get("missing", [])),
+                 "extra": len(sess.get("extra", []))})
+    return sess
+
+
+@router.post("/rfid/rolls/set-routing")
+async def post_set_routing(payload: RoutingPayload, request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "update")
+    ctx = await entity_ctx(request)
+    from services import rfid_print_service as rps
+    res = await rps.set_routing(payload.roll_ids, payload.routing,
+                                resolve_scope_ids(ctx, None), actor["name"])
+    await audit(actor["name"], "roll_routing_set", "inventory_roll", "bulk",
+                {"routing": payload.routing, "rolls": len(payload.roll_ids)})
+    return res

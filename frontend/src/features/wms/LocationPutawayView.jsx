@@ -5,6 +5,7 @@ import {
 import KNSelect from "../../components/KNSelect";
 import ErrorNotice from "../../components/ErrorNotice";
 import axios, { API } from "../../services/apiClient";
+import PutawayOrdersPanel from "./PutawayOrdersPanel";
 
 const nf = new Intl.NumberFormat("id-ID");
 const q = (v) => nf.format(Math.round((v || 0) * 100) / 100);
@@ -167,9 +168,12 @@ export default function LocationPutawayView({ currentUser, selectedEntity }) {
       <div className="flex gap-1 border-b border-[#EFF0F2]">
         <TabBtn id="structure" tab={tab} setTab={setTab} label="Struktur Lokasi" testId="lp-tab-structure" />
         <TabBtn id="putaway" tab={tab} setTab={setTab} label={`Putaway${loc?.unassigned?.rolls ? ` (${loc.unassigned.rolls})` : ""}`} testId="lp-tab-putaway" />
+        <TabBtn id="pa" tab={tab} setTab={setTab} label="Putaway Order (Antar Gedung)" testId="lp-tab-pa" />
       </div>
 
-      {tab === "structure" ? (
+      {tab === "pa" ? (
+        <PutawayOrdersPanel whId={whId} selectedEntity={selectedEntity} />
+      ) : tab === "structure" ? (
         <div className="space-y-3">
           <div className="flex justify-between items-center">
             <button data-testid="lp-add-zone" onClick={addZone}

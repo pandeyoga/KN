@@ -125,6 +125,46 @@ Detail 8 skenario inti di bagian G analisis chat (S1–S8).
 - **R6 — Keamanan, alarm, shrinkage, heartbeat, cycle count RFID**
 - **R7 — Fulfillment Decision Wizard (matriks S1–S8 jadi aksi terpandu)**
 
+## G. FAKTA LAPANGAN FINAL (jawaban user, Juni 2026 — MENGIKAT untuk desain)
+
+### Gudang:
+- **Rancamalang (CENTRAL)**: 5 gedung — G1 Transit, G2 Woven, G3 Knitting, G4 Printing, G5 Retur
+- **Soreang**: 1 gedung penyimpanan (sementara)
+- **Jakarta**: 1 gedung penyimpanan (sementara)
+- Rules penyimpanan = berdasarkan KATEGORI master ERP yang sudah ada, harus configurable
+- Kepemilikan gudang belum pasti → semua harus configurable oleh user (roles, rules, sharing)
+
+### Hardware:
+- Semua Chainway (Android): fixed reader UR300 (gate), handheld Chainway, printer RFID Chainway
+- EPC: custom (generator existing OK)
+- Gate fisik: HANYA gudang penyimpanan → Central 4 gedung penyimpanan punya gate in+out fisik; Soreang punya; Jakarta TIDAK ada (handheld only) → gate_config per gedung wajib configurable
+
+### Operasional:
+- Volume: RIBUAN roll/hari → semua operasi wajib bulk + index + pagination
+- Operator: 1 per gudang penyimpanan, >1 di transit → login per operator, layar per gudang
+- Cross-dock: KEPUTUSAN ADMIN (manual) dengan saran otomatis bila PO terhubung SO
+
+### Retur:
+- Gedung Retur (G5) rules-nya berbasis GRADE bukan kategori (jenis boleh campur)
+- Regrade BAGUS → kembali ke gudang penyimpanan asal (putaway order ke origin); grade TURUN → tetap di gudang retur
+- Barang retur PERLU PRINT TAG BARU (tag lama hilang/rusak)
+- Barang Sisa (BS) disimpan di gudang retur
+
+### Case lain:
+- TIDAK ada konsinyasi
+- Makloon: bahan keluar TANPA rfid; barang jadi hasil makloon MASUK VIA TRANSIT, logic sama seperti pembelian
+- Ambil sendiri di gudang: tetap via transit, sama seperti alur normal, hanya metode pengambilan beda
+
+### Mandat non-fungsional dari user:
+- SSOT ketat, tanpa duplikasi DB/endpoint
+- IA rapi: KONSOLIDASI ke halaman existing, JANGAN buat halaman baru bila ada yang relevan
+- Flow frontend intuitif mengikuti alur kerja fisik
+
+### Keputusan desain final (R0):
+- Koleksi baru `warehouse_sites` {id, name, city}; `warehouses` = GEDUNG, tambah field: site_id, roles[] (transit|storage|return|staging|central_inbound), storage_rules {mode: "category"|"grade", category_ids[], grades[]}, gate_config {physical_gate: bool}
+- Semua dikonfigurasi via halaman Warehouse Master EXISTING (drawer/tab), bukan halaman baru
+- IA konsolidasi: R1 print+verify → tab di Inbound existing; Gate live → upgrade Gate Monitor existing; Jejak Barang → panel di detail roll existing
+
 ### Skema data baru (ringkas)
 - `rfid_print_jobs`: {id, source_type: "gr"|"po", source_id, warehouse_id, items:[{roll_id, epc, zpl, status}], status, created_by}
 - `rfid_verify_sessions`: {id, print_job_id|gr_id, expected_epcs[], scanned_epcs[], missing[], extra[], status}

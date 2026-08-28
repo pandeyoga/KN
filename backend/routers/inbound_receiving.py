@@ -534,6 +534,9 @@ async def complete_inbound_receiving(
                 "supplier_invoice_no": "",     # diisi saat Vendor Bill di-posting
                 "rfid_tag_id": (task.get("roll_id") or None) if not is_multi else None,
                 "is_remnant": False,
+                # FASE R0 — journey (jejak fisik, terpisah dari status bucket stok)
+                "journey": {"stage": "received_transit", "routing": "store",
+                            "updated_at": now_iso()},
                 "created_at": now_iso(), "updated_at": now_iso(),
                 "created_by": actor.get("id") or "system", "created_by_name": actor["name"],
             }
@@ -648,6 +651,8 @@ async def complete_inbound_receiving(
                 "needs_review": _variance.get("level") in ("warn", "block")}
                if _variance else {}),
             **({"qc_status": "pending", "quarantine_qty": final_qty} if qc_on_receipt else {}),
+            **({"supplier_dn_number": payload.supplier_dn.strip()}
+               if (payload and payload.supplier_dn and payload.supplier_dn.strip()) else {}),
         }},
         projection={"_id": 0},
         return_document=ReturnDocument.AFTER

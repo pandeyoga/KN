@@ -32,9 +32,12 @@ import { entityFullById, entityShort } from "../../../utils/entityLabel";
 import { formatQty } from "../../../utils/formatters";
 import {
   createWarehouse, deactivateWarehouse, errText, listAllWarehouses, patchWarehouse,
-  warehouseOccupancy,
+  warehouseOccupancy, listSites, createSite, deleteSite, seedBlueprint, listCategories, WH_ROLES,
 } from "./warehouseApi";
 import WarehouseModeDrawer from "./WarehouseModeDrawer";
+import WarehouseProfileDrawer from "./WarehouseProfileDrawer";
+
+const ROLE_LABELS = Object.fromEntries(WH_ROLES.map((r) => [r.key, r.label]));
 
 const EMPTY_FORM = {
   code: "", name: "", city: "", bin_code: "A1-01", bin_capacity: 1000,
@@ -60,14 +63,23 @@ export default function WarehouseMasterView({ entities = [], selectedEntity, cur
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [modeFor, setModeFor] = useState(null);
+  const [profileFor, setProfileFor] = useState(null);
+  const [sites, setSites] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [newSite, setNewSite] = useState({ name: "", city: "" });
+  const [showSiteForm, setShowSiteForm] = useState(false);
 
   const activeEntityLabel = entityFullById(entities, selectedEntity);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const list = await listAllWarehouses();
-      setRows(list);
+      const [list, siteList, catList] = await Promise.all([
+        listAllWarehouses(),
+        listSites().catch(() => []),
+        listCategories().catch(() => []),
+      ]);
+      setRows(list); setSites(siteList); setCategories(catList);
       // Isi gudang dimuat paralel — dipakai kolom "pemilik stok" supaya keputusan
       // mode gudang tidak diambil buta.
       const pairs = await Promise.all(list.map(async (w) => {
@@ -146,6 +158,30 @@ export default function WarehouseMasterView({ entities = [], selectedEntity, cur
     }
   };
 
+  const siteName = (id) => sites.find((s) => s.id === id)?.name || "";
+
+  const addSite = async () => {
+    if (!newSite.name.trim()) { setError("Nama lokasi wajib diisi."); return; }
+    try {
+      await createSite({ name: newSite.name.trim(), city: newSite.city.trim() });
+      setNewSite({ name: "", city: "" }); setShowSiteForm(false);
+      setNotice("Lokasi ditambahkan."); load();
+    } catch (e) { setError(errText(e, "Gagal menambah lokasi.")); }
+  };
+
+  const removeSite = async (s) => {
+    try { await deleteSite(s.id); setNotice(`Lokasi ${s.name} dihapus.`); load(); }
+    catch (e) { setError(errText(e, "Gagal menghapus lokasi.")); }
+  };
+
+  const runSeed = async () => {
+    try {
+      const r = await seedBlueprint();
+      setNotice(`Blueprint diterapkan: ${r.created_sites} lokasi + ${r.created_warehouses} gedung baru.`);
+      load();
+    } catch (e) { setError(errText(e, "Gagal menerapkan blueprint.")); }
+  };
+
   return (
     <div data-testid="warehouse-master-view">
       <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -154,6 +190,52 @@ export default function WarehouseMasterView({ entities = [], selectedEntity, cur
         <Kpi testId="wh-kpi-dedicated" label="Khusus badan usaha" value={stats.dedicated} icon={Building2} tone="text-[#6B219A]" />
         <Kpi testId="wh-kpi-usable" label={`Boleh dipakai ${activeEntityLabel}`} value={stats.usable} icon={CheckCircle2} tone="text-[#1B7F4B]" />
       </div>
+
+      <section className="section-card mb-3" data-testid="wh-sites-bar">
+        <div className="section-body flex flex-wrap items-center gap-2 py-2.5">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-[#6B6B73]">
+            <MapPin size={11} className="mr-0.5 inline" /> Lokasi Gudang:
+          </span>
+          {sites.length === 0 ? (
+            <span className="text-[12px] text-[#8E8E93]">Belum ada lokasi.</span>
+          ) : sites.map((s) => (
+            <span key={s.id} data-testid={`wh-site-chip-${s.id}`}
+              className="inline-flex items-center gap-1.5 rounded-full border border-[#E5E5EA] bg-[#FAFBFC] px-2.5 py-1 text-[11.5px] font-semibold">
+              {s.name}{s.city ? <span className="font-normal text-[#8E8E93]">· {s.city}</span> : null}
+              <span className="rounded bg-[#EAF2FF] px-1 text-[10px] font-bold text-[#0058CC]">{s.warehouse_count} gedung</span>
+              {canManage && s.warehouse_count === 0 && (
+                <button data-testid={`wh-site-del-${s.id}`} onClick={() => removeSite(s)} aria-label="Hapus lokasi"
+                  className="text-[#C0341D] hover:opacity-70"><X size={11} /></button>
+              )}
+            </span>
+          ))}
+          {canManage && (
+            <span className="ml-auto flex items-center gap-1.5">
+              {showSiteForm ? (
+                <>
+                  <input data-testid="wh-site-name" className="field w-[130px] py-1 text-[11.5px]" placeholder="Nama lokasi"
+                    value={newSite.name} onChange={(e) => setNewSite({ ...newSite, name: e.target.value })} />
+                  <input data-testid="wh-site-city" className="field w-[100px] py-1 text-[11.5px]" placeholder="Kota"
+                    value={newSite.city} onChange={(e) => setNewSite({ ...newSite, city: e.target.value })} />
+                  <button data-testid="wh-site-save" className="primary-button py-1 text-[11px]" onClick={addSite}>Simpan</button>
+                  <button className="icon-button" onClick={() => setShowSiteForm(false)}><X size={13} /></button>
+                </>
+              ) : (
+                <>
+                  <button data-testid="wh-site-add" className="secondary-button text-[11px]" onClick={() => setShowSiteForm(true)}>
+                    <Plus size={12} /> Lokasi
+                  </button>
+                  {sites.length === 0 && (
+                    <button data-testid="wh-seed-blueprint" className="primary-button text-[11px]" onClick={runSeed}>
+                      <Building2 size={12} /> Terapkan Blueprint Gudang
+                    </button>
+                  )}
+                </>
+              )}
+            </span>
+          )}
+        </div>
+      </section>
 
       <section className="section-card">
         <div className="section-head flex-wrap gap-2">
@@ -270,6 +352,7 @@ export default function WarehouseMasterView({ entities = [], selectedEntity, cur
                 <thead>
                   <tr className="border-b border-[#EFF0F2] bg-[#FAFBFC] text-left text-[10px] font-bold uppercase text-[#8E8E93]">
                     <th className="px-3 py-2">Gudang</th>
+                    <th className="px-3 py-2">Profil (peran · rules · gate)</th>
                     <th className="px-3 py-2">Mode pemakaian</th>
                     <th className="px-3 py-2">Isi gudang (pemilik stok)</th>
                     <th className="px-3 py-2 text-center">Status</th>
@@ -285,7 +368,29 @@ export default function WarehouseMasterView({ entities = [], selectedEntity, cur
                         <td className="px-3 py-2">
                           <span className="font-semibold text-[#1C1C1E]">{w.name}</span>
                           <span className="block text-[10.5px] text-[#9A9BA3]">
-                            <MapPin size={9} className="inline" /> {w.code} · {w.city || "—"}
+                            <MapPin size={9} className="inline" /> {w.code} · {siteName(w.site_id) || w.city || "—"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2" data-testid={`wh-profile-cell-${w.id}`}>
+                          {(w.roles || []).length === 0 ? (
+                            <span className="text-[10.5px] text-[#9A9BA3]">belum diatur</span>
+                          ) : (
+                            <span className="flex flex-wrap gap-1">
+                              {(w.roles || []).map((r) => (
+                                <span key={r} className="rounded bg-[#EAF2FF] px-1.5 py-0.5 text-[10px] font-bold text-[#0058CC]">
+                                  {ROLE_LABELS[r] || r}
+                                </span>
+                              ))}
+                            </span>
+                          )}
+                          <span className="mt-0.5 block text-[10px] text-[#8E8E93]">
+                            {(() => {
+                              const m = (w.storage_rules || {}).mode;
+                              if (m === "category") return `rules: ${(w.storage_rules.categories || []).join(", ") || "semua kategori"}`;
+                              if (m === "grade") return `rules: grade ${(w.storage_rules.grades || []).join("/")}`;
+                              return "tanpa rules";
+                            })()}
+                            {" · "}{(w.gate_config || {}).physical_gate ? "gate fisik" : "handheld"}
                           </span>
                         </td>
                         <td className="px-3 py-2">
@@ -319,7 +424,11 @@ export default function WarehouseMasterView({ entities = [], selectedEntity, cur
                         <td className="px-3 py-2 text-right whitespace-nowrap">
                           {canManage && (
                             <>
-                              <button data-testid={`wh-edit-mode-${w.id}`} className="secondary-button text-[11px]"
+                              <button data-testid={`wh-edit-profile-${w.id}`} className="secondary-button text-[11px]"
+                                onClick={() => setProfileFor(w)}>
+                                <Building2 size={12} /> Profil
+                              </button>
+                              <button data-testid={`wh-edit-mode-${w.id}`} className="secondary-button ml-1.5 text-[11px]"
                                 onClick={() => setModeFor(w)}>
                                 <Settings2 size={12} /> Atur mode
                               </button>
@@ -351,6 +460,16 @@ export default function WarehouseMasterView({ entities = [], selectedEntity, cur
           entities={entities}
           onClose={() => setModeFor(null)}
           onSaved={(_updated, msg) => { setModeFor(null); setNotice(msg); load(); }}
+        />
+      )}
+
+      {profileFor && (
+        <WarehouseProfileDrawer
+          warehouse={profileFor}
+          sites={sites}
+          categories={categories}
+          onClose={() => setProfileFor(null)}
+          onSaved={(msg) => { setProfileFor(null); setNotice(msg); load(); }}
         />
       )}
     </div>

@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Tag, RefreshCw, Trash2, Zap, Boxes, Radio, PackageSearch } from "lucide-react";
+import { Tag, RefreshCw, Trash2, Zap, Boxes, Radio, PackageSearch, Printer } from "lucide-react";
 import KNSelect from "../../components/KNSelect";
 import ErrorNotice from "../../components/ErrorNotice";
 import axios, { API } from "../../services/apiClient";
 import { nf, q, fmtTime, Stat, EmptyBox, TabBtn, SectionCard, RfidHeader, useWarehouses } from "./rfidShared";
+import RfidPrintVerifyPanel from "./RfidPrintVerifyPanel";
 
 export default function RfidTagsView({ currentUser, selectedEntity }) {
   const [tab, setTab] = useState("tags");
@@ -72,9 +73,12 @@ export default function RfidTagsView({ currentUser, selectedEntity }) {
       <div className="flex gap-1 border-b border-[#EFF0F2]">
         <TabBtn id="tags" tab={tab} setTab={setTab} label={`Tag Aktif${tags.length ? ` (${tags.length})` : ""}`} testId="rfid-tab-tags" />
         <TabBtn id="untagged" tab={tab} setTab={setTab} label={`Belum Ber-tag${untagged.length ? ` (${untagged.length})` : ""}`} testId="rfid-tab-untagged" />
+        <TabBtn id="print" tab={tab} setTab={setTab} label="Print & Verifikasi" testId="rfid-tab-print" />
       </div>
 
-      {tab === "tags" ? (
+      {tab === "print" ? (
+        <RfidPrintVerifyPanel whId={whId} selectedEntity={selectedEntity} onChanged={load} />
+      ) : tab === "tags" ? (
         <SectionCard title="Daftar Tag RFID Aktif">
           {loading ? <div className="h-16 bg-[#F5F5F7] rounded animate-pulse" />
             : tags.length === 0 ? <EmptyBox icon={Tag} text="Belum ada tag aktif. Encode roll di tab 'Belum Ber-tag'." />

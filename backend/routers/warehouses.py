@@ -154,8 +154,18 @@ async def update_warehouse(warehouse_id: str, payload: GenericPatch, request: Re
     if not current:
         raise HTTPException(status_code=404, detail="Gudang tidak ditemukan")
     allowed = ["code", "name", "city", "zones", "active", "lat", "lng",
-               "sharing_mode", "entity_ids"]
+               "sharing_mode", "entity_ids",
+               # FASE R0 — profil gudang (site, peran, rules, gate)
+               "site_id", "roles", "storage_rules", "gate_config"]
     data = {k: v for k, v in payload.data.items() if k in allowed}
+    # FASE R0 — validasi & normalisasi profil
+    from services import warehouse_profile_service as whp
+    profile_keys = {"site_id", "roles", "storage_rules", "gate_config"} & set(data.keys())
+    if profile_keys:
+        prof = whp.validate_profile({k: data[k] for k in profile_keys})
+        if "site_id" in prof:
+            await whp.assert_site_exists(prof["site_id"])
+        data.update(prof)
     if data.get("code"):
         duplicate = await db.warehouses.find_one(
             {"code": data["code"], "id": {"$ne": warehouse_id}}, {"_id": 0}

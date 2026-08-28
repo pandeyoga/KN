@@ -1,0 +1,47 @@
+{
+  "summary": "Uji FASE R0+R1+R2 (revamp WMS/RFID) backend + frontend. Backend: 30 test pytest baru (sites CRUD & guard 409/404, profil gudang PATCH + validasi roles/mode/site, print job PJ + ZPL ^RFW,H + mark-printed + sesi verifikasi expected/scanned/missing/extra + complete, routing store/cross_dock vs saran putaway, saran PA per kategori, enforcement storage_rules (Retur ditolak untuk grade A), PA full flow: dispatch → confirm-arrival partial EPC → exception + BTG + roll pindah gudang + balances rebuild → resolve-exception accept → completed, regresi inventory/rfid, guard mode 'all' 409 / 401 / RBAC sales 403) → 30/30 PASS, dijalankan 2x (repeatable, self-seeding dgn retire tag). Frontend: 4 skenario Playwright (master gudang + bar lokasi + drawer profil, tambah/hapus lokasi, RFID Print & Verifikasi end-to-end, Putaway Order end-to-end PA00004+BTG00004) → semua alur berjalan KECUALI panel hasil verifikasi RFID yang tidak pernah tampil.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/putaway-orders/suggest", "issue": "check_storage_rules dipanggil dengan grade HARDCODE 'A' (putaway_order_service.suggest line ~59). Akibat: (a) Gedung Retur (rules grade B/C/BS) TIDAK PERNAH muncul sebagai kandidat walau roll-nya grade B/C/BS — padahal itu tujuan yang benar; (b) gudang yang dibatasi grade A akan disarankan untuk roll grade B lalu POST /api/putaway-orders menolak 400 → saran tidak konsisten dengan enforcement. Saran: masukkan grade ke kunci grup atau hitung kandidat per-roll."},
+      {"endpoint": "POST /api/putaway-orders/{id}/resolve-exception", "issue": "Validasi action ('accept'|'return_transit') terjadi DI DALAM loop item, jadi bila action salah dan ada >1 item exception, item pertama sudah dipindah/diubah sebelum 400 dilempar (partial mutation). Validasi harus sebelum iterasi."},
+      {"endpoint": "GET /api/inventory/balances", "issue": "Tidak ada filter warehouse_id/pagination (pre-existing): mengembalikan sampai 2000 dokumen + memuat seluruh warehouses & products tiap request. Untuk volume ribuan roll/hari ini akan berat."},
+      {"endpoint": "POST /api/rfid/print-jobs & POST /api/putaway-orders/{id}/confirm-arrival", "issue": "Perf: encode_tag/find dan update_one + 2 insert movement dijalankan berurutan per roll (N await). Untuk print job massal (ratusan-ribuan tag) sebaiknya bulk_write/insert_many."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "RfidPrintVerifyPanel", "issue": "Panel hasil verifikasi (data-testid rfid-verify-result) TIDAK PERNAH ter-render. Setelah klik 'Selesaikan Verifikasi', completeVerify() memanggil openJob() yang melakukan setSession(null) → panel sesi DAN panel hasil (BERSIH / missing / extra) hilang seketika; pengguna hanya melihat toast 3 detik dan kehilangan daftar EPC missing/extra. Diverifikasi 2x (job 1 tag & 2 tag): count rfid-verify-result = 0 pada t=1s/3s/6s.", "selector": "[data-testid=\"rfid-verify-result\"]", "priority": "HIGH"},
+      {"component": "RfidPrintVerifyPanel.flash()", "issue": "flash() memakai setTimeout 3s tanpa menyimpan/membersihkan timer sebelumnya → pesan sukses BARU ikut terhapus oleh timer pesan LAMA. Terlihat saat klik CROSS-DOCK lalu SIMPAN: notice 'Roll ditandai SIMPAN' hilang seketika.", "selector": "[data-testid=\"rfid-print-msg\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Putaway Order panel (wms-locations → lp-tab-pa)", "issues": ["Kuantitas ditampilkan tanpa satuan: 'Kategori: Barang Sisa · 1 roll · 0,4' dan baris PA '1 roll · 0,4' — tambahkan m/yard agar tidak ambigu (layar lain memakai satuan)"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter263_wms_rfid_r0r1r2.py",
+    "/app/test_reports/pytest/iter263.xml"
+  ],
+  "action_items": [
+    "FE: jangan reset session di openJob() saat completeVerify (atau set ulang session setelah openJob) agar rfid-verify-result tampil dengan daftar missing/extra",
+    "FE: simpan ref timer pada flash() dan clearTimeout sebelum set baru",
+    "BE: suggest() jangan hardcode grade 'A' — kelompokkan/periksa per grade agar Gedung Retur bisa disarankan untuk grade B/C/BS dan saran konsisten dengan enforcement create_order",
+    "BE: validasi action resolve-exception sebelum loop (hindari mutasi sebagian)",
+    "FE (kosmetik): tampilkan satuan pada qty di panel PA"
+  ],
+  "critical_code_review_comments": [
+    "putaway_order_service.suggest(): grade literal 'A' membuat rules grade tidak berguna untuk saran; kunci grup sebaiknya (owner, kategori, grade) atau kandidat dihitung per roll.",
+    "resolve_exception(): validasi input dilakukan di dalam loop → risiko partial write; angkat ke atas fungsi.",
+    "confirm_arrival()/create_print_job(): pola per-dokumen await; untuk volume ribuan roll/hari gunakan bulk_write agar tidak jadi bottleneck.",
+    "Seed blueprint memberi storage_rules {mode:'category', categories:[]} untuk RCM-WOVEN/KNITTING/PRINTING; karena list kosong berarti 'semua kategori', enforcement kategori efektif MATI sampai user mengisi — pastikan ini keputusan yang diinginkan (UI menampilkan 'rules: semua kategori', jadi konsisten)."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter263_wms_rfid_r0r1r2.py"],
+  "success_rate": {"backend": "100% (30/30 pytest)", "frontend": "90% (semua alur R0/R1/R2 berjalan; 1 panel hasil verifikasi tidak render + 1 bug notice kosmetik)"},
+  "seed_data_creation": "Tidak menghapus data demo. Dibuat: site TEST_Site_QA263 (dibuat lalu dihapus), site UI TEST_QA_Lokasi (dibuat lalu dihapus), print job PJ00005-PJ00009, PA00004 (BTG00004) + PA dari pytest, beberapa tag RFID lama di-retire oleh helper self-seed test (roll ter-encode ulang saat print job). Profil SRG-01 diubah saat uji drawer lalu DIPULIHKAN ke roles=[storage], rules mode=none, gate=true.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@kainnusantara.id / demo12345, header X-Entity-Id: ent_ksc",
+  "context_for_next_testing_agent": "Suite baru: /app/backend/tests/test_iter263_wms_rfid_r0r1r2.py — JALANKAN DENGAN -n 0 (kelas saling bergantung lewat dict STATE; pytest.ini memakai -n 2 --dist loadscope yang memecah kelas ke worker berbeda). Suite self-seeding: bila tidak ada roll untagged, ia me-retire 2 tag aktif via DELETE /api/rfid/tags/{id} supaya print job bisa diuji ulang. Frontend TIDAK di-rebuild oleh saya (tidak ada perubahan file frontend). Navigasi tercepat: deep link ?view=md-warehouses / ?view=cs-rfid-tags / ?view=wms-locations lalu klik rfid-tab-print / lp-tab-pa. PA00002 masih menyisakan 1 item exception (data uji main agent) — berguna untuk menguji tombol pa-exc-accept/pa-exc-return lewat UI (belum saya klik).",
+  "rca_of_the_issue": "rfid-verify-result hilang: RfidPrintVerifyPanel.completeVerify() → setSession(hasil) lalu await openJob(activeJob.id); openJob() baris pertama setSession(null) sehingga blok render `session && session.status === 'completed'` tidak pernah aktif. Reproduksi: tab Print & Verifikasi → pilih roll → Print Job → Mulai Verifikasi → Simulasi Scan Semua → Selesaikan Verifikasi → panel hasil tidak muncul (hanya toast). Mitigasi: pertahankan session (mis. openJob(jobId, {keepSession:true})) atau set session lagi setelah openJob selesai."
+}
