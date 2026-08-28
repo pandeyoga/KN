@@ -53,6 +53,37 @@ Posisi Kain Nusantara:
 - **FASE R4 — Gate Live & Manifest**: gate-in validation (dokumen + rules gudang), gate-out manifest per SO, `rfid_gate_sessions`, Layar Kiosk Gate per gudang (in & out) dengan feed real-time + alarm besar HIJAU/MERAH.
 - **FASE R5 — Keamanan & Ops**: incident/alarm workflow (acknowledge, catatan, laporan shrinkage), heartbeat monitor device, cycle count via sweep RFID.
 
+## E. REVISI berdasarkan penjelasan praktik lapangan user (Juni 2026)
+
+### Konsep baru yang HARUS ditambahkan (belum ada di kode & belum ada di plan R1-R5 awal):
+1. **Tipe gudang**: `warehouses.wh_type` = "transit" | "storage". Gudang transit = titik masuk semua barang (inspect, QC, print tag, verify) & titik keluar (staging, final check, loading). Device transit: RFID printer + handheld. Device storage: gate in/out + monitor PC.
+2. **Journey stage terpisah dari status stok**: JANGAN tambah status roll baru ke bucket SSOT. Tambah field terpisah `inventory_rolls.journey` = {stage, routing, putaway_order_id, ...}. Status bucket (available/reserved/dst) tetap jadi SSOT kuantitas; journey = jejak fisik.
+3. **Routing decision (poin 3 user)**: `journey.routing` = "store" (putaway ke gudang penyimpanan) | "cross_dock" (tetap di transit, langsung ready-to-ship). Cross-dock terdeteksi otomatis jika PO terhubung SO (special order) atau manual oleh admin. Label UI jelas: badge "CROSS-DOCK / LANGSUNG KIRIM" vs "SIMPAN".
+4. **Putaway Order (dokumen)**: putaway queue sekarang cuma antrean roll. Harus jadi DOKUMEN per gudang tujuan (PA-xxxx): daftar roll + gudang tujuan + rules-check → jadi acuan validasi gate-in.
+5. **Putaway Confirmation / Bukti Terima Gudang (istilah yang user cari)**: dokumen terbit saat barang tiba di gate-in gudang penyimpanan & tervalidasi. Istilah industri: "Putaway Confirmation" (SAP: Warehouse Task Confirmation). Nama di app: **"Bukti Terima Gudang (BTG)"**.
+6. **Gate Exception & Checker Session**: jika gate-in/out mismatch (tak terbaca / tak sesuai) → roll bermasalah masuk exception; yang OK tetap lanjut masuk. Operator scan ulang via handheld, UI checker DI ERP (PC per gudang) — handheld hanya alat baca (kirim EPC via ingest API).
+7. **Final Loading Check**: sebelum naik mobil di transit, sesi handheld validasi vs SO (manifest). Selisih = blokir dispatch.
+8. **Surat jalan supplier matching**: GR menyimpan `supplier_dn_number` untuk dicocokkan dengan surat jalan fisik pengirim.
+
+### State machine journey (INBOUND → STORE):
+`received_transit` → `qc_pending` → `qc_passed` (atau hold/quarantine) → `tag_printed` → `tag_verified` → [routing decision] →
+- STORE: `putaway_assigned` (masuk Putaway Order PA-xxx) → `putaway_in_transit` → gate-in validasi → `stored` (BTG terbit) | `gate_exception` → checker → resolve
+- CROSS-DOCK: `cross_dock_ready` (tetap di transit) → langsung ke alur outbound staging
+
+### State machine journey (OUTBOUND dari SO/Transfer):
+`allocated` → `picking` (picking list per gudang) → `picked` → gate-out validasi → `to_transit` → `staged_transit` → final loading check (handheld vs SO) → `loaded` → `dispatched/in_transit` → `delivered`
+
+### Dokumen lengkap dalam siklus:
+GR (ada) → Print Job RFID (baru) → Verify Session (baru) → Putaway Order (upgrade) → Gate Session in (baru) → BTG/Putaway Confirmation (baru) || Picking List (ada, perlu split per gudang) → Gate Session out (baru) → Staging/Final Check (baru) → Surat Jalan (ada)
+
+### Roadmap DIREVISI:
+- **R0 — Fondasi**: wh_type transit/storage, journey stage model, routing store/cross-dock, supplier_dn di GR
+- **R1 — Print & Verify di Transit**: print job massal dari GR, sesi verifikasi handheld vs GR
+- **R2 — Putaway Order + Rules**: dokumen PA per gudang tujuan, storage_rules per gudang/zona, saran gudang otomatis
+- **R3 — Gate Live**: ingest API device, gate session in/out + manifest, layar monitor per gate, exception + checker session di ERP
+- **R4 — Outbound penuh**: picking per gudang, staging transit, final loading check vs SO
+- **R5 — Keamanan & Ops**: alarm workflow, shrinkage report, heartbeat, cycle count RFID
+
 ### Skema data baru (ringkas)
 - `rfid_print_jobs`: {id, source_type: "gr"|"po", source_id, warehouse_id, items:[{roll_id, epc, zpl, status}], status, created_by}
 - `rfid_verify_sessions`: {id, print_job_id|gr_id, expected_epcs[], scanned_epcs[], missing[], extra[], status}
