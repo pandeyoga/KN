@@ -824,6 +824,8 @@ async def _restock_returned_items(ret: Dict[str, Any], items: List[Dict], now: s
             "earmarked_for": None, "committed_to": None, "reserved_ref": None,
             "lot": _rtn_lot["lot_number"], "lot_id": _rtn_lot["id"],
             "acquired": {"via": "return", "ref_id": ret["id"], "date": now},
+            # FASE R5 — retur masuk pipeline fisik yang sama: journey + siap print tag baru
+            "journey": {"stage": "received_transit", "routing": "store", "updated_at": now},
             **prov,
             "created_at": now, "updated_at": now,
         }

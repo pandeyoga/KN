@@ -11,6 +11,7 @@ import { askConfirm } from "../../services/confirmService";
 import { overlayDismiss } from "../../utils/overlayDismiss";
 import { formatQty } from "../../utils/formatters";
 import { Badge, MiniBar } from "./OutboundScanBadges";
+import LoadingCheckPanel from "./LoadingCheckPanel";
 
 export default function OutboundScanInterface({ user }) {
   const [tasks, setTasks] = useState([]);
@@ -361,6 +362,8 @@ export default function OutboundScanInterface({ user }) {
                     const maxShip = Math.round((Math.min(picked, selectedTask.quantity) - shipped) * 100) / 100;
                     if (maxShip <= 0) return null;
                     return (
+                      <>
+                      <LoadingCheckPanel orderId={selectedTask.order_id} soNumber={selectedTask.so_number || selectedTask.order_number} />
                       <div data-testid="dispatch-panel" className="rounded-lg border border-[#BFE6CC] bg-[#F1FBF4] p-2.5 space-y-2">
                         <div className="flex items-center justify-between text-[10.5px]">
                           <span className="text-[#6B6B73]">Siap dikirim: <strong className="text-[#1C7A3E] tabular-nums">{formatQty(maxShip)} {selectedTask.unit}</strong></span>
@@ -384,6 +387,7 @@ export default function OutboundScanInterface({ user }) {
                           </button>
                         </div>
                       </div>
+                      </>
                     );
                   })()}
                 </>

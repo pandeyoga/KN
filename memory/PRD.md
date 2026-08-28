@@ -878,3 +878,42 @@ saat stored/tag_verified (pytest 6/6 ulang PASS setelah fix).
 - **R5** Retur fisik multi-leg + gedung retur + print tag baru utk retur + Jejak
   Barang (timeline roll lintas dokumen).
 - **R6** Alarm/shrinkage/heartbeat/cycle count RFID. **R7** Fulfillment Wizard (S1–S8).
+
+---
+## FASE R3+R4+Jejak Barang+R5 — Revamp WMS/RFID Tahap 2 (2026-06 · iteration_265)
+### Yang dibangun
+- **R3 Device Ingest API (kontrak middleware Kotlin/Chainway)**: API key per device
+  (`POST /rfid/devices/{id}/api-key`, header `X-Device-Key`), `POST /rfid/ingest`
+  (batch EPC → keputusan green/red per EPC, SADAR-DOKUMEN: gate-in cocokkan PA
+  tujuan/salah-gudang, gate-out wajib dokumen SO/transfer/PA + sebut nomor SO),
+  `POST /rfid/heartbeat`, printer pull `GET /rfid/device-jobs/pending` + `/ack`
+  (tipe device baru "printer"). Kiosk LIVE di Gate Monitor (banner besar
+  HIJAU/MERAH, polling 4 dtk, `rfid-gate-live`/`rfid-gate-kiosk`); API key
+  ditampilkan admin di halaman Devices.
+- **R4 Final Loading Check**: `POST /outbound/so/{id}/loading-check/start` (sesi
+  kind=loading_check di rfid_verify_sessions) → scan → complete → hasil disimpan
+  di `sales_orders.loading_check`; **dispatch DIBLOKIR** bila sesi terbuka atau
+  hasil tidak bersih (guard di endpoint dispatch). UI `LoadingCheckPanel.jsx`
+  di OutboundScanInterface (sebelum panel dispatch) + peringatan
+  `not_committed_count` (roll reserved lolos check tapi dispatch butuh committed).
+  PHYSICAL_STATUSES rfid diperluas (committed/picked/packed/hold bisa di-tag).
+- **Jejak Barang**: `GET /inventory/rolls/{id}/journey-timeline`
+  (roll_timeline_service — acquired/tag/print/verify/PA+BTG/mutasi/gate reads/
+  SO/loading check terurut). UI tombol "Jejak" per baris RollsTable →
+  `RollJourneyPopup.jsx`.
+- **R5 Retur masuk pipeline**: roll hasil retur (return_service) di-stamp
+  `journey {received_transit, store}` → otomatis muncul di antrean print tag BARU
+  → verifikasi → PA grade-aware menyarankan Gedung Retur utk grade B/C/BS.
+### Verifikasi
+iteration_265: backend 33/33 PASS (+1 skip precondition) + regresi R0-R2 34 PASS;
+frontend 4/4 alur PASS (kiosk live, api-key+printer, loading check selisih+bersih+
+blokir dispatch, popup jejak). 2 saran opsional diterapkan setelahnya (warning roll
+belum-commit + reset badge lastResult), pytest 33/33 ulang PASS.
+### Backlog WMS/RFID berikutnya
+- **R6** Alarm workflow (acknowledge/incident), laporan shrinkage, monitor
+  heartbeat device, cycle count via sweep RFID.
+- **R7** Fulfillment Decision Wizard (matriks S1–S8 → aksi terpandu).
+- **Dokumentasi API middleware** (`API_MIDDLEWARE.md` utk Kotlin dev) — endpoint
+  sudah final: ingest/heartbeat/device-jobs; tinggal ditulis saat user minta.
+- Opsional: selaraskan EXPECTED_STATUSES loading check vs ship_order_rolls
+  (committed-only) di sisi commit otomatis.

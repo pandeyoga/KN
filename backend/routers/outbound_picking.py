@@ -365,6 +365,10 @@ async def dispatch_outbound(task_id: str, request: Request, ship_qty: float = No
         raise HTTPException(status_code=404, detail="Outbound task tidak ditemukan")
     assert_entity_access(task, "wms_tasks", await entity_ctx(request))
 
+    # FASE R4 — Final Loading Check menjaga pintu dispatch (selisih = blokir).
+    from services import loading_check_service as lc
+    await lc.dispatch_guard(task.get("order_id"))
+
     updated_task, shipment = await dispatch_task(task, ship_qty, actor["name"])
 
     await audit(actor["name"], "outbound_dispatched", "wms_task", task_id, {
@@ -373,3 +377,44 @@ async def dispatch_outbound(task_id: str, request: Request, ship_qty: float = No
     })
 
     return {"task": updated_task, "shipment": shipment}
+
+
+# ─── FASE R4 — Final Loading Check (handheld vs manifest SO sebelum naik mobil) ──
+from entity_scope import resolve_scope_ids as _resolve_scope_ids
+from services import loading_check_service as _lc
+from services import rfid_print_service as _rps
+
+
+@router.post("/outbound/so/{order_id}/loading-check/start")
+async def start_loading_check(order_id: str, request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "update")
+    ctx = await entity_ctx(request)
+    sess = await _lc.start(order_id, _resolve_scope_ids(ctx, None), actor["name"])
+    await audit(actor["name"], "loading_check_started", "sales_order", order_id,
+                {"session_id": sess["id"], "expected": len(sess.get("expected", []))})
+    return sess
+
+
+@router.post("/outbound/loading-check/{session_id}/scan")
+async def scan_loading_check(session_id: str, payload: Dict[str, Any], request: Request) -> Dict[str, Any]:
+    await require_permission(request, "wms", "update")
+    ctx = await entity_ctx(request)
+    return await _rps.scan_verify(session_id, list(payload.get("epcs") or []),
+                                  _resolve_scope_ids(ctx, None))
+
+
+@router.post("/outbound/loading-check/{session_id}/complete")
+async def complete_loading_check(session_id: str, request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "update")
+    ctx = await entity_ctx(request)
+    sess = await _lc.complete(session_id, _resolve_scope_ids(ctx, None))
+    await audit(actor["name"], "loading_check_completed", "sales_order", sess.get("order_id", ""),
+                {"result": sess.get("result"), "missing": len(sess.get("missing", [])),
+                 "extra": len(sess.get("extra", []))})
+    return sess
+
+
+@router.get("/outbound/so/{order_id}/loading-check")
+async def get_loading_check(order_id: str, request: Request) -> Dict[str, Any]:
+    await require_permission(request, "wms", "view")
+    return await _lc.status_for_order(order_id)

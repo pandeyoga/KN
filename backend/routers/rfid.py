@@ -299,3 +299,49 @@ async def post_set_routing(payload: RoutingPayload, request: Request) -> Dict[st
     await audit(actor["name"], "roll_routing_set", "inventory_roll", "bulk",
                 {"routing": payload.routing, "rolls": len(payload.roll_ids)})
     return res
+
+
+# ─── FASE R3 — Device Ingest API (middleware Kotlin / Chainway) ──────────────
+class IngestPayload(BaseModel):
+    epcs: list[str]
+
+
+@router.post("/rfid/devices/{device_id}/api-key")
+async def post_device_api_key(device_id: str, request: Request,
+                              regenerate: bool = False) -> Dict[str, Any]:
+    actor = await require_role(request, ["admin"])
+    from services import rfid_ingest_service as ing
+    res = await ing.ensure_api_key(device_id, regenerate)
+    await audit(actor["name"], "rfid_device_key_issued", "rfid_device", device_id,
+                {"regenerate": regenerate})
+    return res
+
+
+@router.post("/rfid/ingest")
+async def post_ingest(payload: IngestPayload, request: Request) -> Dict[str, Any]:
+    """Device fisik (gate/handheld) kirim batch EPC. Auth: header X-Device-Key."""
+    from services import rfid_ingest_service as ing
+    device = await ing.authenticate(request.headers.get("X-Device-Key"))
+    return await ing.ingest(device, payload.epcs)
+
+
+@router.post("/rfid/heartbeat")
+async def post_heartbeat(request: Request) -> Dict[str, Any]:
+    from services import rfid_ingest_service as ing
+    device = await ing.authenticate(request.headers.get("X-Device-Key"))
+    return await ing.heartbeat(device)
+
+
+@router.get("/rfid/device-jobs/pending")
+async def get_device_jobs(request: Request) -> Dict[str, Any]:
+    """Printer RFID (middleware) menarik antrean ZPL. Auth: X-Device-Key."""
+    from services import rfid_ingest_service as ing
+    device = await ing.authenticate(request.headers.get("X-Device-Key"))
+    return await ing.pending_jobs_for_device(device)
+
+
+@router.post("/rfid/device-jobs/{job_id}/ack")
+async def post_device_job_ack(job_id: str, request: Request) -> Dict[str, Any]:
+    from services import rfid_ingest_service as ing
+    device = await ing.authenticate(request.headers.get("X-Device-Key"))
+    return await ing.ack_job_printed(device, job_id)

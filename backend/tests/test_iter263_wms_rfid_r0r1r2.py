@@ -331,7 +331,10 @@ class TestR2PutawayOrder:
         ready = []
         for g in sug["groups"]:
             cand_ids = {c["warehouse_id"] for c in g["candidates"]}
-            assert retur["id"] not in cand_ids, "Gedung Retur muncul sebagai kandidat grade A"
+            # iter264 — saran PA kini GRADE-AWARE: Gedung Retur hanya dilarang untuk grup
+            # grade A (grup grade B/C/BS memang BOLEH mendapat Gedung Retur).
+            if (g.get("grade") or "A").upper() == "A":
+                assert retur["id"] not in cand_ids, "Gedung Retur muncul sebagai kandidat grade A"
             assert cand_ids, "grup tanpa kandidat tujuan"
             ready.extend(g["rolls"])
         STATE["ready"] = ready

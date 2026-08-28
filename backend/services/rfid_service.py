@@ -20,6 +20,7 @@ from core_utils import new_id, now_iso, safe_doc
 # Status roll yang dianggap "fisik ada" (kandidat tag).
 PHYSICAL_STATUSES = [
     "available", "reserved", "allocated", "quarantine",
+    "committed", "picked", "packed", "hold",
     "in_transit_sales", "in_transit_transfer",
 ]
 
@@ -27,7 +28,7 @@ PHYSICAL_STATUSES = [
 GREEN_OUT = {"reserved", "allocated", "in_transit_sales", "in_transit_transfer", "delivered", "consumed"}
 RED_OUT = {"available", "quarantine"}
 
-DEVICE_TYPES = {"gate", "fixed_reader", "handheld"}
+DEVICE_TYPES = {"gate", "fixed_reader", "handheld", "printer"}
 
 
 def generate_epc() -> str:

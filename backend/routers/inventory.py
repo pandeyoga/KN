@@ -26,6 +26,15 @@ class PutawayPayload(BaseModel):
     bin_id: str
 
 
+@router.get("/inventory/rolls/{roll_id}/journey-timeline")
+async def roll_journey_timeline(roll_id: str, request: Request) -> Dict[str, Any]:
+    """JEJAK BARANG — timeline satu roll lintas semua dokumen (PO→GR→tag→PA→SO→gate)."""
+    await require_permission(request, "inventory", "view")
+    ctx = await entity_ctx(request)
+    from services.roll_timeline_service import roll_timeline
+    return await roll_timeline(roll_id, resolve_scope_ids(ctx, None))
+
+
 @router.get("/inventory/rolls/{roll_id}/cost-history")
 async def roll_cost_history_endpoint(roll_id: str, request: Request) -> Dict[str, Any]:
     """RIWAYAT NILAI (HPP) satu roll — siapa mengubahnya, kapan, dan atas dasar apa.

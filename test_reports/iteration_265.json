@@ -1,0 +1,42 @@
+{
+  "summary": "Uji FASE R3 (Device Ingest API + printer pull ZPL) · R4 (Final Loading Check) · JEJAK BARANG (roll journey timeline) · R5 (roll retur masuk pipeline fisik) — backend + frontend. Backend: suite baru /app/backend/tests/test_iter265_r3r4r5.py (34 test, self-seeding, JALANKAN -n 0) → 33 passed / 1 skipped (precondition), 0 failed. Regresi R0-R2 (test_iter263 + test_iter264, -n 0) → 34 passed / 2 skipped setelah 1 assertion STALE di suite iter263 disesuaikan dengan perilaku grade-aware iter264. Frontend (Playwright, admin@kainnusantara.id + entitas KSC): Gate Monitor kiosk LIVE, Devices api-key + opsi tipe Printer, Final Loading Check di tab Barang Keluar (skenario selisih & bersih + blokir dispatch), dan popup Jejak Barang di tab Stok→Roll — semuanya BEKERJA. Tidak ditemukan bug pada fitur R3/R4/R5-Jejak. Satu temuan konsistensi SSOT (pra-ada, di luar R4) dilaporkan di bawah.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/outbound/so/{order_id}/loading-check/start vs POST /api/outbound/tasks/{id}/dispatch", "issue": "Loading check menganggap roll ber-status `reserved` sebagai expected (EXPECTED_STATUSES memuat reserved/allocated), sehingga check bisa berakhir CLEAN dan gerbang R4 terbuka, tetapi dispatch tetap gagal 409 'Roll commit untuk order tak cukup dikirim (tersedia 0 dari 1.0)' karena ship_order_rolls hanya mau roll `committed`. Terlihat nyata pada SO-0004 (task wms_a491864053de, picked 30/50, 1 roll RL-00001 status reserved, committed=0). Bukan cacat R4 (guard-nya benar), tapi pesan yang diterima petugas jadi membingungkan: 'sudah BERSIH, dispatch dibuka' lalu tertahan alasan lain."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "LoadingCheckPanel", "issue": "Setelah klik 'Selesaikan' (lc-complete), badge lc-last-result masih menampilkan hasil LAMA (mis. 'ADA SELISIH') ~1-2 detik sampai loadStatus() selesai, dan tombol lc-start ikut disabled. Tidak salah data, hanya jeda tanpa indikator; sempat membuat pembacaan otomatis salah baca. Saran: kosongkan lastResult (atau tampilkan status 'memuat…') selama busy.", "selector": "[data-testid=\"lc-last-result\"]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter265_r3r4r5.py",
+    "/app/test_reports/pytest/iter265_results.xml"
+  ],
+  "action_items": [
+    "OPSIONAL (konsistensi, bukan blocker): selaraskan status roll yang dianggap 'siap muat' oleh loading_check_service.EXPECTED_STATUSES dengan status yang benar-benar bisa dikirim shipment_service.ship_order_rasi/ship_order_rolls (committed), atau tampilkan peringatan 'roll masih reserved — belum di-commit' pada sesi loading check agar petugas tidak bertemu 409 setelah check BERSIH.",
+    "OPSIONAL (UI): pada LoadingCheckPanel, kosongkan/labeli badge lc-last-result selama proses complete agar tidak menampilkan hasil kadaluwarsa 1-2 detik."
+  ],
+  "critical_code_review_comments": [
+    "rfid_ingest_service.ingest(): batas 500 EPC per batch + dedup sudah ada; namun loop melakukan 1 query rfid_tags + 1 query inventory_rolls + 1 update per EPC (N+1). Untuk sweep handheld 500 tag di lapangan ini ±1500 round-trip. Saran: batch $in untuk tags & rolls dan bulk_write untuk update last_seen.",
+    "loading_check_service.complete(): hasil disimpan di sales_orders.loading_check dan sesi; dispatch_guard membaca dua-duanya (sesi terbuka + hasil terakhir) — SSOT-nya konsisten dan sudah teruji (blokir 400 dengan pesan jelas untuk kedua kondisi).",
+    "roll_timeline_service.roll_timeline(): membuang event tanpa `at` sebelum sort — aman terhadap dokumen lama. Batas 15 gate read terakhir masuk akal; kalau nanti dipakai audit, pertimbangkan paging.",
+    "rfid_ingest_service.ensure_api_key(): key disimpan plaintext di rfid_devices.api_key dan GET /api/rfid/devices mengembalikan dokumen device — pastikan field api_key tidak ikut terbuka ke peran non-admin (saat ini layar Devices memang admin-only; verifikasi proyeksi list_devices untuk peran warehouse).",
+    "outbound_picking.py mengimpor entity_scope/loading_check/rfid_print_service di TENGAH file (setelah endpoint dispatch) — jalan, tapi pindahkan ke header agar tidak menipu pembaca."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter265_r3r4r5.py (baru)",
+    "/app/backend/tests/test_iter263_wms_rfid_r0r1r2.py (1 assertion stale disesuaikan: larangan 'Gedung Retur' kini hanya untuk grup grade A — perilaku grade-aware iter264)"
+  ],
+  "success_rate": {"backend": "100% (33 passed / 1 skipped / 0 failed dari suite iter265; regresi iter263+264: 34 passed / 2 skipped)", "frontend": "100% dari 4 alur yang diuji (kiosk live, api-key+printer, loading check, jejak barang)"},
+  "seed_data_creation": "Semua self-seeding & dibersihkan: 2 device 'printer' TEST + 1 gate-in TEST dihapus di akhir kelas; PA lama sempat di-set status 'in_transit' + roll journey ditandai untuk uji SALAH GUDANG lalu DIPULIHKAN persis. Data demo yang berubah PERMANEN (sengaja, bagian alur uji): (1) SO KSC/SO-00010 → loading check CLEAN + dispatch berhasil (SJ terbit, task dispatched) sesuai permintaan; (2) SO-0005 task wms_e5aaa8d8bbc9 → pick 1 + dispatch parsial 1 (loading check clean); (3) SO-0004 loading check CLEAN (tidak meninggalkan blokir); (4) 1 retur jual TEST_R5 dibuat→submit→approve→inspect grade B→settle store_credit sehingga muncul roll retur baru (RTN-000xx) ber-journey received_transit/store yang lalu di-print & diverifikasi tag (stage tag_verified).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@kainnusantara.id / demo12345 (X-Entity-Id: ent_ksc); device pakai X-Device-Key dari POST /api/rfid/devices/{id}/api-key",
+  "context_for_next_testing_agent": "Suite iter265 (/app/backend/tests/test_iter265_r3r4r5.py) HARUS dijalankan `-n 0` (kelas berbagi dict STATE). Suite ini self-seeding & re-runnable: _resolve_lc_target() memilih task outbound apa pun yang belum dispatched dan SO-nya punya roll ber-tag (mengutamakan yang punya roll COMMITTED); bila SO kandidat hanya punya roll `reserved`, test_06 SKIP dengan pesan RCA (batas SSOT ship_order_rolls, bukan R4). Yang SUDAH terbukti: api-key issue/idempotent/regenerate + key lama mati, heartbeat→online, ingest red (EPC bogus / roll available) & green (roll committed + nomor SO), gate-in green 'Sesuai PAxxxxx' dan red 'SALAH GUDANG', 401 tanpa/salah key, semua tercatat di /api/rfid/reads (read_type gate_in/gate_out), printer pull ZPL (^XA + ^RFW) + ack→printed + 403 printer gudang lain + 400 guard tipe device + 404 job bogus, loading check start(idempotent)→dispatch blocked 'BERJALAN'→complete with_issues→dispatch blocked 'TIDAK BERSIH'→scan semua→clean→dispatch OK, journey-timeline (urut, kinds tag/so/gate/loading/putaway, 404 & 403), R5 end-to-end retur→roll journey received_transit/store→untagged-rolls→print+verify→suggest 'Gedung Retur' grade B. Frontend: deep-link ?view=cs-rfid-gate / ?view=cs-rfid-devices / ?view=operations (lalu klik wms-tab-outbound / wms-tab-stok + inventory-tab-rolls). CATATAN PENTING untuk skrip: tombol dispatch memunculkan ConfirmModal ber-testid PREFIX 'outbound-dispatch-confirm' → konfirmasi dengan 'outbound-dispatch-confirm-confirm', kalau tidak diklik overlay memblokir klik berikutnya (bukan bug). Badge lc-last-result perlu ~2 detik untuk menyegarkan setelah lc-complete — beri wait sebelum assert.",
+  "rca_of_the_issue": "Satu-satunya kegagalan dispatch yang ditemui di UI (SO-0004: 409 'Roll commit untuk order tak cukup dikirim (tersedia 0 dari 1.0)') BUKAN cacat R4. Reproduksi: pilih task wms_a491864053de (picked 30/50) → Final Loading Check CLEAN (1/1) → Kirim Sebagian 1 → 409. Akar masalah: loading_check_service.EXPECTED_STATUSES memuat 'reserved'/'allocated', sedangkan shipment_service.ship_order_rolls hanya memindahkan roll ber-status 'committed'; di data demo SO-0004 satu-satunya roll (RL-00001) masih 'reserved' dan committed=0 walau picked_qty=30 tercatat di task. Mitigasi uji: pemilih kandidat suite kini mengutamakan SO dengan roll committed, dan test_06 SKIP + menjelaskan bila tidak ada. Mitigasi produk (opsional, untuk main agent): tandai di panel loading check bila ada roll expected yang belum committed, atau samakan daftar status kedua mesin."
+}

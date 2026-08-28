@@ -1,8 +1,11 @@
 /** RollsTable — daftar roll fisik (Roll-as-SSOT, Fase 0.5) + Pegging (Sub-fase 1.7). */
-import { Layers, Anchor } from "lucide-react";
+import { useState } from "react";
+import { Layers, Anchor, Route } from "lucide-react";
 import { formatQty, RollStatusBadge } from "./inventoryConstants";
+import RollJourneyPopup from "../RollJourneyPopup";
 
 export default function RollsTable({ loading, rolls = [], canPeg = false, onPeg, onUnpeg, busyRollId = null }) {
+  const [journeyFor, setJourneyFor] = useState(null);
   return (
     <div className="bg-white rounded-xl border border-[#EFF0F2] overflow-hidden" data-testid="rolls-table">
       <div className="overflow-x-auto">
@@ -120,6 +123,14 @@ export default function RollsTable({ loading, rolls = [], canPeg = false, onPeg,
                     )}
                   </td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
+                    <button
+                      data-testid={`roll-journey-btn-${r.id}`}
+                      onClick={() => setJourneyFor(r.id)}
+                      title="Jejak Barang — timeline lengkap roll ini"
+                      className="mr-1.5 inline-flex items-center gap-1 rounded-md border border-[#CFE0F5] bg-white px-2 py-1 text-[10.5px] font-semibold text-[#0058CC] hover:bg-[#F0F6FF]"
+                    >
+                      <Route size={10} /> Jejak
+                    </button>
                     {!canPeg && <span className="text-[#C7C7CC]">—</span>}
                     {canPeg && ear && (
                       <button
@@ -151,6 +162,7 @@ export default function RollsTable({ loading, rolls = [], canPeg = false, onPeg,
           </tbody>
         </table>
       </div>
+      {journeyFor && <RollJourneyPopup rollId={journeyFor} onClose={() => setJourneyFor(null)} />}
     </div>
   );
 }

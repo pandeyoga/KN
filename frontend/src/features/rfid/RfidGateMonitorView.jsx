@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Cpu, RefreshCw, ScanLine, ShieldCheck, ShieldAlert, ArrowLeftRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Cpu, RefreshCw, ScanLine, ShieldCheck, ShieldAlert, ArrowLeftRight, Radio } from "lucide-react";
 import KNSelect from "../../components/KNSelect";
 import ErrorNotice from "../../components/ErrorNotice";
 import axios, { API } from "../../services/apiClient";
@@ -17,6 +17,25 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [live, setLive] = useState(false);
+  const liveT = useRef(null);
+
+  const loadReads = async () => {
+    try {
+      const params = whId ? { warehouse_id: whId } : {};
+      const [r, s] = await Promise.all([
+        axios.get(`${API}/rfid/reads`, { params: { ...params, limit: 25 } }),
+        axios.get(`${API}/rfid/summary`, { params }),
+      ]);
+      setReads((r.data.reads || []).filter((x) => x.read_type !== "inventory"));
+      setSummary(s.data);
+    } catch { /* polling senyap */ }
+  };
+
+  useEffect(() => {
+    if (live) { liveT.current = setInterval(loadReads, 4000); }
+    return () => { if (liveT.current) clearInterval(liveT.current); };
+  }, [live, whId]); // eslint-disable-line
 
   const load = async () => {
     setLoading(true); setError(null);
@@ -56,6 +75,11 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
       <RfidHeader icon={Cpu} title="Gate Monitor" subtitle="Simulasikan pembacaan tag di gate. Sistem memvalidasi HIJAU (sah) / MERAH (tak sah).">
         <KNSelect data-testid="rfid-gate-wh" value={whId} onValueChange={setWhId} options={whOpts}
           className="field !py-1 !px-2 text-[12px] w-auto" placeholder="Gudang" />
+        <button data-testid="rfid-gate-live" onClick={() => setLive((v) => !v)}
+          className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
+            live ? "bg-[#C0341D] text-white" : "border border-[#EFF0F2] bg-white hover:bg-[#F5F5F7]"}`}>
+          <Radio size={14} className={live ? "animate-pulse" : ""} /> {live ? "LIVE ●" : "Mode Live"}
+        </button>
         <button data-testid="rfid-gate-refresh" onClick={load}
           className="flex items-center gap-1 rounded-lg border border-[#EFF0F2] bg-white px-3 py-1.5 text-[12px] font-semibold hover:bg-[#F5F5F7]">
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} /> Refresh
@@ -63,6 +87,29 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
       </RfidHeader>
 
       {error && <ErrorNotice message={error} onRetry={load} />}
+
+      {live && (() => {
+        const gateReads = gateId ? reads.filter((r) => r.device_id === gateId) : reads;
+        const last = gateReads[0];
+        const bg = !last ? "#F5F5F7" : last.result === "green" ? "#1B7F4B" : last.result === "red" ? "#C0341D" : "#0058CC";
+        return (
+          <div data-testid="rfid-gate-kiosk" className="rounded-2xl p-6 text-center transition-colors"
+            style={{ background: bg, color: last ? "#fff" : "#6B6B73" }}>
+            {!last ? (
+              <p className="text-[16px] font-bold">Menunggu pembacaan gate… (layar admin gudang — update tiap 4 detik)</p>
+            ) : (
+              <>
+                <p className="text-4xl sm:text-5xl font-black tracking-wide" data-testid="rfid-kiosk-verdict">
+                  {last.result === "green" ? "✓ HIJAU — LOLOS" : last.result === "red" ? "✕ MERAH — TAHAN" : "INFO"}
+                </p>
+                <p className="mt-2 text-[15px] font-semibold">{last.roll_no || last.epc} · {last.product_name || "EPC tak dikenal"}</p>
+                <p className="text-[13px] opacity-90">{last.reason}</p>
+                <p className="mt-1 text-[11px] opacity-75">{last.device_name} · {fmtTime(last.timestamp)}</p>
+              </>
+            )}
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat icon={ArrowLeftRight} label="Gate Aktif" value={devices.filter((d) => d.status === "online").length} color="#0058CC" loading={loading} />

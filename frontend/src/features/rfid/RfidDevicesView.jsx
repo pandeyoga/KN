@@ -5,11 +5,12 @@ import ErrorNotice from "../../components/ErrorNotice";
 import axios, { API } from "../../services/apiClient";
 import { Stat, EmptyBox, Pill, SectionCard, RfidHeader, fmtTime, useWarehouses } from "./rfidShared";
 
-const TYPE_LABEL = { gate: "Gate", fixed_reader: "Fixed Reader", handheld: "Handheld" };
+const TYPE_LABEL = { gate: "Gate", fixed_reader: "Fixed Reader", handheld: "Handheld", printer: "Printer RFID" };
 const TYPE_OPTS = [
   { value: "gate", label: "Gate (pintu masuk/keluar)" },
   { value: "fixed_reader", label: "Fixed Reader (zona)" },
   { value: "handheld", label: "Handheld" },
+  { value: "printer", label: "Printer RFID (cetak tag)" },
 ];
 const DIR_OPTS = [{ value: "in", label: "Masuk (in)" }, { value: "out", label: "Keluar (out)" }];
 
@@ -36,6 +37,14 @@ export default function RfidDevicesView({ currentUser, selectedEntity }) {
   useEffect(() => { load(); }, [whId]); // eslint-disable-line
 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 2500); };
+  const issueKey = async (d) => {
+    setBusy(true); setError(null);
+    try {
+      await axios.post(`${API}/rfid/devices/${d.id}/api-key`, null, { params: { regenerate: !!d.api_key } });
+      flash(d.api_key ? "API key di-regenerate." : "API key diterbitkan — pakai header X-Device-Key di middleware.");
+      await load();
+    } catch (e) { setError(e.response?.data?.detail || "Gagal menerbitkan API key"); } finally { setBusy(false); }
+  };
   const seedDefaults = async () => {
     setBusy(true); setError(null);
     try { const r = await axios.post(`${API}/rfid/devices/seed-defaults`); flash(`${r.data.created} device default dibuat.`); await load(); }
@@ -151,9 +160,20 @@ export default function RfidDevicesView({ currentUser, selectedEntity }) {
                           className="flex-1 flex items-center justify-center gap-1 rounded-lg border border-[#EFF0F2] px-2 py-1 text-[11px] font-semibold hover:bg-[#F5F5F7] disabled:opacity-40">
                           <Power size={12} /> {d.status === "online" ? "Matikan" : "Nyalakan"}
                         </button>
+                        <button data-testid={`rfid-apikey-${d.id}`} disabled={busy} onClick={() => issueKey(d)}
+                          title="API key untuk middleware (header X-Device-Key)"
+                          className="rounded-lg border border-[#EFF0F2] px-2 py-1 text-[11px] font-semibold text-[#6B219A] hover:bg-[#F3E9FA] disabled:opacity-40">
+                          Key
+                        </button>
                         <button data-testid={`rfid-del-device-${d.id}`} disabled={busy} onClick={() => remove(d.id)}
                           className="rounded-lg border border-[#EFF0F2] px-2 py-1 text-[#C0341D] hover:bg-[#FBE9E7] disabled:opacity-40"><Trash2 size={12} /></button>
                       </div>
+                    )}
+                    {d.api_key && isAdmin && (
+                      <p data-testid={`rfid-apikey-val-${d.id}`}
+                        className="mt-1 break-all rounded bg-[#F5F5F7] px-1.5 py-1 font-mono text-[9.5px] text-[#3C3C43]">
+                        X-Device-Key: {d.api_key}
+                      </p>
                     )}
                   </div>
                 ))}
