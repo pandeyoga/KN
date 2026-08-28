@@ -84,6 +84,47 @@ GR (ada) → Print Job RFID (baru) → Verify Session (baru) → Putaway Order (
 - **R4 — Outbound penuh**: picking per gudang, staging transit, final loading check vs SO
 - **R5 — Keamanan & Ops**: alarm workflow, shrinkage report, heartbeat, cycle count RFID
 
+## F. AUDIT LANJUTAN — Entitas, Gudang, Interco, Retur (sudah ADA di kode)
+
+### Yang SUDAH ada (kuat):
+1. **Entity scoping (F0-B)**: scope registry per koleksi; inventory pakai `owner_entity_id` (dukung barang entitas A,B,C campur di 1 gudang — kebutuhan gudang central SUDAH terpenuhi di level data). RFID tags/reads ikut owner.
+2. **Gudang shared/dedicated (E4.1)**: `sharing_mode` shared|dedicated + `entity_ids[]` (many-to-many). Gudang punya `city`, zones/racks/levels/bins. TIDAK ada: hierarki lokasi/site, gedung, tipe/peran gudang.
+3. **Interco G-6 (jual-beli antar-PT)**: dokumen kembar (seller: SO+SJ+invoice internal; buyer: PO+vendor bill), pair_id, harga dari kontrak internal (fixed_price), PPN mode, settlement, invarian IC-AR=IC-AP, GL akun transit 1-1310, link warehouse-task. Flow: create→confirm→ship→receive→invoice→settle.
+4. **Interco Return G-6b**: retur antar-PT dokumen kembar, nilai buku dipulihkan ke cost asli penjual, dual-control, faktur pengganti.
+5. **Sales Returns (1.11 + R2)**: draft→pending_approval→approved→inspecting→inspected→settled (refund/store_credit/nego/reject), complaint reasons, lampiran FOTO, quarantine+release, regrading (grade A/B/C→rekomendasi outcome), **transfer-ownership per roll**, **create-purchase-return** (jembatan retur jual→retur beli), **/returns/chain/{doc_id}** (rantai dokumen retur).
+6. **Purchase Returns**: submit→approve→ship-to-supplier→supplier-accept/reject→goods-back.
+7. **Label printer**: sudah ada generator ZPL/ESC-POS (barcode) — pijakan bagus untuk print RFID.
+
+### GAP terhadap penjelasan gudang & retur user:
+- G1 **Hierarki gudang**: butuh Kota → Lokasi/Site (Rancamalang, Soreang, Jakarta) → Gedung → zona/rak/bin. Saat ini flat + city saja.
+- G2 **Peran gudang (future-proof)**: bukan single type tapi `roles[]`: central_inbound, transit, storage, return, staging — bisa berubah tanpa migrasi. + `storage_rules` per gedung.
+- G3 **Gudang retur**: belum ada tujuan fisik khusus retur; quarantine ada tapi tidak terikat gudang/gedung retur.
+- G4 **RFID sebagai syarat retur**: lampiran foto ada; referensi EPC/tag untuk validasi keaslian barang retur belum.
+- G5 **Routing retur multi-leg**: customer→gudang Jakarta→(simpan / kirim ke central) belum ada dokumen kaki-perjalanan; transfer antar gudang ada tapi tidak terjahit ke dokumen retur.
+- G6 **Jejak Barang (Item Passport)**: /returns/chain hanya untuk retur. Butuh timeline SATU roll lintas SEMUA dokumen (PO→GR→print→verify→PA→BTG→SO→pick→gate→SJ→retur→interco→retur beli) — data sudah ada tersebar (movements, reads, refs, pair_id), tinggal API+UI timeline.
+- G7 **Decision matrix pemenuhan**: keputusan "beli sendiri vs beli via entitas lain (interco) vs ambil stok; simpan dulu vs cross-dock; kirim via gudang Jakarta vs langsung" belum ada wizard/aksi terpandu — user harus merangkai dokumen manual.
+
+### MATRIKS SKENARIO (dikembangkan sesuai permintaan):
+Sumbu: (1) siapa yang beli: A sendiri | B punya kontrak (interco) ; (2) routing fisik: store central | cross-dock | via gudang tujuan | langsung customer ; (3) kepemilikan: tetap | pindah via interco ; (4) retur: ke gudang penjual | langsung central | ke supplier (via interco return bila pembeli≠pemegang kontrak) | pindah kepemilikan saja.
+Detail 8 skenario inti di bagian G analisis chat (S1–S8).
+
+### FINANCE MAPPING (anti selisih):
+- Tiap perpindahan fisik TANPA ganti pemilik = transfer (tanpa jurnal AR/AP, hanya relokasi qty).
+- Tiap ganti pemilik = interco (jurnal kembar, harga kontrak, 1-1310 transit netral).
+- Retur customer = credit note + stok masuk quarantine dengan nilai sesuai outcome regrade.
+- Retur ke supplier lintas entitas = interco return (pulihkan cost asli) DULU baru purchase return — urutan ini yang menjaga GL tidak selisih.
+- Cross-dock: COGS tetap WAC entitas pemilik; tidak ada jurnal tambahan karena tidak pernah jadi stok gudang penyimpanan.
+
+### Roadmap DIREVISI v2 (menggantikan v1):
+- **R0 — Fondasi Gudang & Journey**: hierarki site/gedung, roles[] gudang, storage_rules, journey stage, routing store/cross-dock, supplier_dn
+- **R1 — Print & Verify RFID di Transit** (pijakan: label_printer ZPL sudah ada)
+- **R2 — Putaway Order + Rules + BTG**
+- **R3 — Gate Live + monitor + checker + ingest API**
+- **R4 — Outbound penuh + final loading check + jahit interco/transfer ke gate**
+- **R5 — Retur fisik multi-leg + gudang retur + RFID evidence + Jejak Barang timeline**
+- **R6 — Keamanan, alarm, shrinkage, heartbeat, cycle count RFID**
+- **R7 — Fulfillment Decision Wizard (matriks S1–S8 jadi aksi terpandu)**
+
 ### Skema data baru (ringkas)
 - `rfid_print_jobs`: {id, source_type: "gr"|"po", source_id, warehouse_id, items:[{roll_id, epc, zpl, status}], status, created_by}
 - `rfid_verify_sessions`: {id, print_job_id|gr_id, expected_epcs[], scanned_epcs[], missing[], extra[], status}
