@@ -917,3 +917,34 @@ belum-commit + reset badge lastResult), pytest 33/33 ulang PASS.
   sudah final: ingest/heartbeat/device-jobs; tinggal ditulis saat user minta.
 - Opsional: selaraskan EXPECTED_STATUSES loading check vs ship_order_rolls
   (committed-only) di sisi commit otomatis.
+
+---
+## FASE R6 + CYCLE COUNT + R7 — Revamp WMS/RFID Tahap 3 (2026-06 · iteration_266)
+### Yang dibangun
+- **R6 Keamanan**: `rfid_incidents` otomatis dari pembacaan gate MERAH (ingest &
+  simulator, dedupe EPC+device 10 mnt → hits++), alur acknowledge→resolve dengan
+  catatan (`POST /rfid/incidents/{id}/acknowledge|resolve`), laporan shrinkage
+  (`GET /rfid/shrinkage-report` — red reads/insiden/gate-exception per gudang +
+  cycle count terkini), monitor heartbeat (`GET /rfid/device-health`, stale >5 mnt).
+  UI: tab "Alarm & Keamanan" di Gate Monitor (`RfidSecurityPanel.jsx`).
+- **Cycle Count RFID**: `POST /rfid/cycle-count/start` (expected semua tag aktif
+  gudang, sesi kind=cycle_count) → scan → `/complete` → dokumen CC-xxx (akurasi %,
+  missing, extra misplaced/unknown) — REPORT ONLY, stok tidak berubah (SSOT).
+  UI: tab "Cycle Count" di Lokasi RFID (`CycleCountPanel.jsx`).
+- **R7 Fulfillment Wizard**: `GET /fulfillment/wizard/{so_id}` — analisis per item
+  (stok sendiri per gudang, stok entitas lain + kontrak internal PAIR-CORRECT via
+  interco_service._find_active_internal_contract, rekomendasi
+  alokasi_stok/interco/pengadaan + skenario S-x + langkah terpandu; SO tanpa item →
+  overall tidak_ada_item). Aksi 1-klik: `POST .../create-interco` (draft dokumen
+  kembar) & `POST .../create-pr` (PR draft source=wizard, saran CROSS-DOCK).
+  UI: tombol "Wizard Pemenuhan" di `SOCompactPanel` → `FulfillmentWizard.jsx`.
+  Permission memakai domain "order".
+### Verifikasi
+iteration_266: backend 29/31 → 2 kegagalan (nama entitas mentah, kontrak salah
+pasangan) DIPERBAIKI + pesan interco 'undefined' di FE diperbaiki (buyer.number)
++ wizard kosong diberi pesan + fixture test lapuk dirapikan → regresi penuh 4 suite
+98 passed / 3 skipped. Frontend R6 & Cycle Count 100% PASS via testing agent.
+### Backlog berikutnya
+- Dokumentasi API middleware Kotlin (API_MIDDLEWARE.md) — endpoint sudah final.
+- Retur fisik multi-leg penuh (kaki transfer Jakarta→Central terjahit dokumen retur).
+- Opsional UI: link aksi dari device stale ke halaman Devices.

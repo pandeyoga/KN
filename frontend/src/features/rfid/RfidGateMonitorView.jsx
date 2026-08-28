@@ -3,7 +3,8 @@ import { Cpu, RefreshCw, ScanLine, ShieldCheck, ShieldAlert, ArrowLeftRight, Rad
 import KNSelect from "../../components/KNSelect";
 import ErrorNotice from "../../components/ErrorNotice";
 import axios, { API } from "../../services/apiClient";
-import { Stat, EmptyBox, Pill, SectionCard, RfidHeader, fmtTime, resultColor, useWarehouses } from "./rfidShared";
+import { Stat, EmptyBox, Pill, SectionCard, RfidHeader, TabBtn, fmtTime, resultColor, useWarehouses } from "./rfidShared";
+import RfidSecurityPanel from "./RfidSecurityPanel";
 
 export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
   const { whId, setWhId, whOpts } = useWarehouses();
@@ -17,6 +18,7 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [tab, setTab] = useState("monitor");
   const [live, setLive] = useState(false);
   const liveT = useRef(null);
 
@@ -88,6 +90,15 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
 
       {error && <ErrorNotice message={error} onRetry={load} />}
 
+      <div className="flex gap-1 border-b border-[#EFF0F2]">
+        <TabBtn id="monitor" tab={tab} setTab={setTab} label="Monitor Gate" testId="gate-tab-monitor" />
+        <TabBtn id="security" tab={tab} setTab={setTab} label="Alarm & Keamanan" testId="gate-tab-security" />
+      </div>
+
+      {tab === "security" ? (
+        <RfidSecurityPanel whId={whId} selectedEntity={selectedEntity} />
+      ) : (
+      <>
       {live && (() => {
         const gateReads = gateId ? reads.filter((r) => r.device_id === gateId) : reads;
         const last = gateReads[0];
@@ -170,6 +181,8 @@ export default function RfidGateMonitorView({ currentUser, selectedEntity }) {
               </div>
             )}
       </SectionCard>
+      </>
+      )}
     </div>
   );
 }

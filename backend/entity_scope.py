@@ -41,6 +41,9 @@ SCOPE_FIELD: Dict[str, Optional[str]] = {
     "rfid_verify_sessions": "owner_entity_id",
     "putaway_orders": "owner_entity_id",
     "warehouse_sites": SHARED,
+    # FASE R6 — log keamanan lintas entitas (insiden gate & cycle count)
+    "rfid_incidents": SHARED,
+    "rfid_cycle_counts": SHARED,
     # SHARED / global (tidak di-scope)
     "uoms": SHARED,
     # FASE E-4 (E4.1) — `warehouses` TETAP SHARED dengan sengaja. Pembatasan

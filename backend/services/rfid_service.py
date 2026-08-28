@@ -274,6 +274,9 @@ async def _record_read(device: Dict[str, Any], roll: Dict[str, Any], tag: Dict[s
         "result": decision["result"], "reason": decision["reason"], "timestamp": now_iso(),
     }
     await db.rfid_reads.insert_one(read)
+    if read["result"] == "red" and read_type in ("gate_in", "gate_out"):
+        from services import rfid_incident_service as inc  # FASE R6 — alarm otomatis
+        await inc.create_from_read(read)
     await db.rfid_tags.update_one({"id": tag["id"]}, {"$set": {
         "last_seen_at": read["timestamp"], "last_seen_device_id": device["id"],
         "last_seen_device_name": device.get("name"), "last_seen_location": device.get("location"),

@@ -365,6 +365,9 @@ class TestR2PutawayOrder:
         if not STATE.get("ready"):
             pytest.skip("tidak ada roll siap putaway")
         dest = warehouses["RCM-WOVEN"]
+        # Data bisa lapuk antar-run: roll uji mungkin sudah berada di RCM-WOVEN.
+        if STATE.get("wh_from") == dest["id"]:
+            dest = warehouses["RCM-KNITTING"]
         rolls = STATE["ready"][:2]
         n = len(rolls)
         r = admin.post(f"{BASE}/api/putaway-orders", json={

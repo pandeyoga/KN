@@ -130,6 +130,11 @@ async def ingest(device: Dict[str, Any], epcs: List[str]) -> Dict[str, Any]:
             "last_seen_warehouse_id": device.get("warehouse_id")}})
     if reads:
         await db.rfid_reads.insert_many(reads)
+        # FASE R6 — pembacaan gate MERAH otomatis menjadi insiden (alarm operator)
+        from services import rfid_incident_service as inc
+        for r in reads:
+            if r["result"] == "red" and r["read_type"] in ("gate_in", "gate_out"):
+                await inc.create_from_read(r)
     greens = sum(1 for r in results if r["result"] == "green")
     reds = sum(1 for r in results if r["result"] == "red")
     return {"device": {"id": device["id"], "code": device.get("code"), "direction": device.get("direction")},

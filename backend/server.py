@@ -32,6 +32,7 @@ from routers import (
     rfid,
     warehouse_sites,   # FASE R0 — lokasi (site) gudang + seed blueprint
     putaway_orders,    # FASE R2 — Putaway Order (PA) + BTG
+    fulfillment,       # FASE R7 — Fulfillment Wizard (S1–S8 terpandu)
     finance_analytics, budgets, color_library,
     makloons, process_recipes, makloon_orders,
     enums, uom_conversions,
@@ -133,7 +134,7 @@ for module in [
     hr_leave, hr_kpi, design_gallery, integrations, hr_analytics, tax_center,
     financial_statements, closing, finance_bi, crm_omnichannel, consolidation,
     rfid,
-    warehouse_sites, putaway_orders,   # FASE R0/R2
+    warehouse_sites, putaway_orders, fulfillment,   # FASE R0/R2/R7
     finance_analytics, budgets,
     enums,          # Fase A (PS-01/02/03/09 · R7) — registry enum domain tekstil
     uom_conversions,  # Fase B (D-06/D-07) — registry konversi satuan GLOBAL + toleransi

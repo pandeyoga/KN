@@ -4,12 +4,15 @@
  * seluruh detail + tombol aksi lifecycle dibuka lewat "Lihat detail & aksi"
  * (pop-up berisi `OrderDetailPanel` yang sama — satu sumber tampilan & aksi).
  */
-import { Check, Maximize2, XCircle } from "lucide-react";
+import { useState } from "react";
+import { Check, Maximize2, Wand2, XCircle } from "lucide-react";
 import { formatCurrency } from "../../utils/formatters";
 import { StagePill, SubStatusChips } from "../../components/SoStatusBadges";
 import EntityBadge from "../../components/EntityBadge";
+import FulfillmentWizard from "./FulfillmentWizard";
 
 export default function SOCompactPanel({ order, onClose, onOpenFull }) {
+  const [showWizard, setShowWizard] = useState(false);
   if (!order) return null;
   const its = order.items || [];
   const qty = its.reduce((s, it) => s + Number(it.qty ?? it.quantity ?? 0), 0);
@@ -67,11 +70,16 @@ export default function SOCompactPanel({ order, onClose, onOpenFull }) {
           </p>
         )}
 
+        <button type="button" data-testid="so-open-wizard" onClick={() => setShowWizard(true)}
+          className="flex w-full items-center justify-center gap-1 rounded-lg border border-[#D9C2EC] bg-[#FBF7FE] px-3 py-2 text-[12px] font-semibold text-[#6B219A] hover:bg-[#F3E9FA]">
+          <Wand2 size={13} /> Wizard Pemenuhan
+        </button>
         <button type="button" data-testid="so-open-full-detail" onClick={onOpenFull}
           className="secondary-button w-full justify-center">
           <Maximize2 size={13} /> Lihat detail &amp; aksi
         </button>
       </div>
+      {showWizard && <FulfillmentWizard orderId={order.id} onClose={() => setShowWizard(false)} />}
     </div>
   );
 }

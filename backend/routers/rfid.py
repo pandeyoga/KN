@@ -345,3 +345,89 @@ async def post_device_job_ack(job_id: str, request: Request) -> Dict[str, Any]:
     from services import rfid_ingest_service as ing
     device = await ing.authenticate(request.headers.get("X-Device-Key"))
     return await ing.ack_job_printed(device, job_id)
+
+
+# ─── FASE R6 — Insiden (alarm gate merah), shrinkage, kesehatan device ───────
+class IncidentNotePayload(BaseModel):
+    note: str = ""
+
+
+@router.get("/rfid/incidents")
+async def get_incidents(request: Request, status: Optional[str] = None,
+                        warehouse_id: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
+    await require_permission(request, "wms", "view")
+    from services import rfid_incident_service as inc
+    rows = await inc.list_incidents(status, warehouse_id, limit)
+    return {"count": len(rows), "incidents": rows}
+
+
+@router.post("/rfid/incidents/{incident_id}/acknowledge")
+async def post_incident_ack(incident_id: str, payload: IncidentNotePayload,
+                            request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "update")
+    from services import rfid_incident_service as inc
+    row = await inc.acknowledge(incident_id, actor["name"], payload.note)
+    await audit(actor["name"], "rfid_incident_ack", "rfid_incident", incident_id, {})
+    return row
+
+
+@router.post("/rfid/incidents/{incident_id}/resolve")
+async def post_incident_resolve(incident_id: str, payload: IncidentNotePayload,
+                                request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "update")
+    from services import rfid_incident_service as inc
+    row = await inc.resolve(incident_id, actor["name"], payload.note)
+    await audit(actor["name"], "rfid_incident_resolved", "rfid_incident", incident_id, {})
+    return row
+
+
+@router.get("/rfid/shrinkage-report")
+async def get_shrinkage(request: Request, days: int = 30) -> Dict[str, Any]:
+    await require_permission(request, "wms", "view")
+    from services import rfid_incident_service as inc
+    return await inc.shrinkage_report(days)
+
+
+@router.get("/rfid/device-health")
+async def get_device_health(request: Request) -> Dict[str, Any]:
+    await require_permission(request, "wms", "view")
+    from services import rfid_incident_service as inc
+    return await inc.device_health()
+
+
+# ─── CYCLE COUNT RFID — stock opname kilat via sweep handheld ────────────────
+class CycleCountStartPayload(BaseModel):
+    warehouse_id: str
+
+
+@router.post("/rfid/cycle-count/start")
+async def post_cc_start(payload: CycleCountStartPayload, request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "scan")
+    ctx = await entity_ctx(request)
+    from services import cycle_count_service as cc
+    return await cc.start(payload.warehouse_id, resolve_scope_ids(ctx, None), actor["name"])
+
+
+@router.post("/rfid/cycle-count/{session_id}/complete")
+async def post_cc_complete(session_id: str, request: Request) -> Dict[str, Any]:
+    actor = await require_permission(request, "wms", "scan")
+    from services import cycle_count_service as cc
+    res = await cc.complete(session_id, actor["name"])
+    await audit(actor["name"], "rfid_cycle_count_completed", "rfid_cycle_count", res["id"],
+                {"cc_number": res["cc_number"], "accuracy": res["accuracy_pct"]})
+    return res
+
+
+@router.get("/rfid/cycle-counts")
+async def get_cc_list(request: Request, warehouse_id: Optional[str] = None) -> Dict[str, Any]:
+    await require_permission(request, "wms", "view")
+    from services import cycle_count_service as cc
+    rows = await cc.list_counts(warehouse_id)
+    return {"count": len(rows), "counts": rows}
+
+
+@router.get("/rfid/cycle-counts/{cc_id}")
+async def get_cc_detail(cc_id: str, request: Request) -> Dict[str, Any]:
+    await require_permission(request, "wms", "view")
+    from services import cycle_count_service as cc
+    return await cc.get_count(cc_id)

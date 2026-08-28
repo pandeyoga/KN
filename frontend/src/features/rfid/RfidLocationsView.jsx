@@ -3,12 +3,14 @@ import { MapPin, RefreshCw, Radar, Radio, PackageX, AlertTriangle } from "lucide
 import KNSelect from "../../components/KNSelect";
 import ErrorNotice from "../../components/ErrorNotice";
 import axios, { API } from "../../services/apiClient";
-import { Stat, EmptyBox, Pill, SectionCard, RfidHeader, fmtTime, useWarehouses } from "./rfidShared";
+import { Stat, EmptyBox, Pill, SectionCard, RfidHeader, TabBtn, fmtTime, useWarehouses } from "./rfidShared";
+import CycleCountPanel from "./CycleCountPanel";
 
 const STATE_COLOR = { tracked: "green", unseen: "gray", drift: "red" };
 
 export default function RfidLocationsView({ currentUser, selectedEntity }) {
   const { whId, setWhId, whOpts } = useWarehouses();
+  const [tab, setTab] = useState("lokasi");
   const [items, setItems] = useState([]);
   const [readers, setReaders] = useState([]);
   const [readerId, setReaderId] = useState("");
@@ -64,6 +66,15 @@ export default function RfidLocationsView({ currentUser, selectedEntity }) {
       {error && <ErrorNotice message={error} onRetry={load} />}
       {msg && <div className="rounded-lg bg-[#E7F7EC] text-[#1B7E3B] text-[12px] font-semibold px-3 py-2">{msg}</div>}
 
+      <div className="flex gap-1 border-b border-[#EFF0F2]">
+        <TabBtn id="lokasi" tab={tab} setTab={setTab} label="Lokasi Tag" testId="loc-tab-lokasi" />
+        <TabBtn id="cc" tab={tab} setTab={setTab} label="Cycle Count (Opname RFID)" testId="loc-tab-cc" />
+      </div>
+
+      {tab === "cc" ? (
+        <CycleCountPanel whId={whId} selectedEntity={selectedEntity} />
+      ) : (
+      <>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat icon={Radio} label="Total Tag" value={counts.total} color="#0058CC" loading={loading} />
         <Stat icon={Radar} label="Terlacak" value={counts.tracked} color="#34C759" loading={loading} testId="rfid-loc-tracked" />
@@ -105,6 +116,8 @@ export default function RfidLocationsView({ currentUser, selectedEntity }) {
               </div>
             )}
       </SectionCard>
+      </>
+      )}
     </div>
   );
 }

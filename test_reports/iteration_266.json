@@ -1,0 +1,50 @@
+{
+  "summary": "Uji penuh FASE R6 (insiden gate merah + ack/resolve, shrinkage report, device health), CYCLE COUNT RFID, dan R7 FULFILLMENT WIZARD — backend (31 test pytest baru, 29 lulus / 2 gagal mendokumentasikan cacat wizard) + frontend Playwright (Gate Monitor tab Alarm & Keamanan, Lokasi RFID tab Cycle Count, Wizard Pemenuhan dari daftar SO). Regresi suite iter263/264/265 dijalankan (-n 0): 68 lulus, 1 gagal karena data uji lapuk (bukan regresi R6/R7). Inti fitur R6 + Cycle Count BEKERJA end-to-end; R7 berfungsi tetapi menampilkan id entitas mentah dan pesan sukses 'undefined', plus flag kontrak internal yang salah pasangan PT.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/fulfillment/wizard/{so_id}", "issue": "Nama badan usaha tidak ter-resolve: services/fulfillment_wizard_service.analyze() membaca field 'name'/'code' dari koleksi business_entities, padahal skema memakai 'legal_name'/'short_name'. Akibatnya so.entity_name & other_entities[].entity_name berisi id mentah ('ent_ksc', 'ent_kanda') dan tampil begitu di layar wizard."},
+      {"endpoint": "GET /api/fulfillment/wizard/{so_id}", "issue": "Flag kontrak internal TIDAK spesifik pasangan PT & arah: query supplier_contracts hanya memfilter {partner_kind:'entity', product_id, status:'active'} tanpa entity_id=penjual / partner_id=pembeli dan tanpa cek valid_from/valid_to. Bukti: so_008 · prod_batik_mega dari ent_kanda menampilkan kontrak 'KSC/SCT-00011' (arah KSC→KANDA, tarif 157.000) padahal kontrak yang berlaku untuk pasangan itu adalah KANDA/SCT-00001 (204.100). Badge 'ada kontrak internal' + harga bisa menyesatkan dan tidak konsisten dengan penegakan interco_service._find_active_internal_contract."},
+      {"endpoint": "GET /api/fulfillment/wizard/so_6e559191d080 (SO-0009 waiting_stock)", "issue": "SO dengan items kosong (punya backorders) mengembalikan items:[] + overall:'alokasi_stok' tanpa penanda apa pun — layar wizard jadi kosong tanpa penjelasan. Sebaiknya overall 'tidak_ada_item'/pesan, dan pertimbangkan membaca 'backorders'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "FulfillmentWizard", "issue": "Pesan sukses interco menampilkan 'Draft Interco undefined dibuat' — respons create-interco berbentuk {pair_id, seller, buyer} sehingga r.data.number dan r.data.id undefined (baris 35 FulfillmentWizard.jsx). Perbaiki ke r.data.buyer?.number (atau seller.number).", "selector": "[data-testid=\"wizard-done-0\"]", "priority": "HIGH"},
+      {"component": "FulfillmentWizard", "issue": "Header wizard & langkah menampilkan id entitas mentah ('ent_ksc', 'ent_kanda') sebagai nama PT (akibat bug backend entity_name di atas).", "selector": "[data-testid=\"fulfillment-wizard\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Gate Monitor · Alarm & Keamanan", "issues": ["Kartu insiden yang sudah SELESAI tetap menampilkan tombol 'Tindak' (rfid-inc-act-{id}) sehingga operator bisa menekannya lalu menerima 400 dari server; sebaiknya tombol disembunyikan untuk status resolved.", "Panel 'Kesehatan Device' menampilkan 9 device 'Stale (>5 mnt)' tanpa hierarki visual/urutan gudang — mudah dibaca, tapi tanpa aksi lanjutan (mis. tautan ke menu Devices)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter266_r6_cc_r7.py",
+    "/app/test_reports/pytest/iter266_results.xml"
+  ],
+  "action_items": [
+    "Perbaiki resolusi nama entitas di fulfillment_wizard_service.analyze(): pakai legal_name/short_name dari business_entities (bukan name/code).",
+    "Perbaiki pencarian kontrak internal di wizard agar memfilter entity_id=penjual, partner_id=pembeli SO, dan validitas tanggal — samakan dengan interco_service._find_active_internal_contract (idealnya pakai ulang fungsi itu).",
+    "FulfillmentWizard.jsx baris 35: ambil nomor dokumen dari r.data.buyer?.number || r.data.seller?.number, jangan r.data.number (kini tampil 'undefined'). Setelah edit WAJIB `bash /app/scripts/rebuild_frontend.sh`.",
+    "RfidSecurityPanel: sembunyikan tombol 'Tindak' untuk insiden berstatus resolved (server sudah benar menolak 400).",
+    "Wizard untuk SO tanpa item (SO-0009 waiting_stock) sebaiknya menampilkan pesan eksplisit, bukan panel kosong.",
+    "Bersihkan/segarkan fixture tests/test_iter263_wms_rfid_r0r1r2.py::TestR2PutawayOrder::test_full_pa_flow — roll uji sudah berada di gudang tujuan (RCM-WOVEN) sehingga API benar menolak 'Gudang asal dan tujuan sama' (data lapuk, bukan bug produk)."
+  ],
+  "critical_code_review_comments": [
+    "fulfillment_wizard_service.analyze(): pemanggilan db.supplier_contracts.find_one di dalam loop per (item × entitas) tanpa filter pasangan PT — selain salah secara bisnis, ini juga N+1 query; jadikan satu agregasi/reuse interco_service.",
+    "fulfillment_wizard_service._available_by_owner() memuat ulang seluruh peta nama gudang untuk SETIAP item SO (query warehouses berulang) — pindahkan ke luar loop.",
+    "rfid_incident_service.create_from_read() dedupe memakai last_at >= cutoff pada dokumen status 'open' saja; insiden yang sudah di-ack/resolve dari EPC+device sama akan membuat insiden BARU dalam 10 menit. Perilaku ini masuk akal (alarm baru setelah ditindak) tetapi belum didokumentasikan — pastikan itu keputusan sadar.",
+    "cycle_count_service.start() menyimpan owner_entity_id=None saat scope multi-entitas ('Semua Entitas'), sedangkan rfid_print_service.scan_verify() menolak sesi bila owner_entity_id tidak ada di scope → sesi yang dibuat dari mode Semua Entitas tidak bisa di-scan (mode itu memang hanya-lihat, jadi cukup dipagari lebih awal dengan 409 yang menuntun).",
+    "device_health() sudah benar menyembunyikan api_key (diverifikasi oleh test) — pertahankan proyeksi itu bila field device bertambah."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter266_r6_cc_r7.py"
+  ],
+  "success_rate": {"backend": "94% (29/31 test iter266 lulus; 2 gagal = cacat wizard yang dilaporkan)", "frontend": "90% (R6 & Cycle Count 100%; Wizard tampil & aksi jalan tetapi label/nama salah)"},
+  "seed_data_creation": "Insiden gate merah baru (dari ingest & simulasi gate, semuanya sudah di-ack/resolve saat uji layar), CC00002–CC00005 di wh_bandung (laporan saja, balances TIDAK berubah — diverifikasi), PR draft PR-00010..PR-00012 (source=wizard, dari test create-pr), 1 pasang interco draft KANDA/IC-00010 + KSC/IC-00010 (dibuat lewat tombol wizard di layar, kontrak KANDA/SCT-00002 asli). Kontrak uji 'TEST_SCT-R7' dan pasangan interco dari kontrak uji SUDAH DIHAPUS. CC00001, PR-00009, dan insiden lama milik main agent tidak disentuh.",
+  "should_call_test_agent_after_fix": true,
+  "should_main_agent_self_test": false,
+  "test_credentials": "admin@kainnusantara.id / demo12345 (X-Entity-Id: ent_ksc); device key GATE-BDG-OUT diambil ulang via POST /api/rfid/devices/rdev_b1bc75a4db04/api-key",
+  "context_for_next_testing_agent": "Jalankan /app/backend/tests/test_iter266_r6_cc_r7.py dengan `-n 0` (kelas berbagi dict STATE). Test TestR7Wizard::test_09 & test_10 SENGAJA gagal sampai bug nama entitas & flag kontrak diperbaiki — keduanya adalah assertion perilaku benar, jangan dilonggarkan. Test R6 menghapus insiden 'open' sisa uji untuk EPC+device yang dipakai agar idempoten. Verifikasi UI: nav deep link ?view=cs-rfid-gate / ?view=cs-rfid-lokasi / ?view=orders berfungsi; kiosk 'rfid-kiosk-verdict' HANYA muncul saat 'Mode Live' aktif (bukan bug). Cycle count via layar: pilih gudang di rfid-loc-wh dulu, lalu loc-tab-cc → cc-start → cc-simulate → cc-complete. Untuk wizard rekomendasi interco pakai SO KSC/SO-00010 (so_d5287a3ace1e); tidak ada SO KSC dengan procurement_items sehingga tombol wizard-create-pr tidak pernah tampil di layar (create-pr sudah diuji via API).",
+  "rca_of_the_issue": "1) entity_name mentah: business_entities memakai 'legal_name'/'short_name', tetapi wizard membaca 'name'/'code' → fallback ke id. 2) Flag kontrak salah: query kontrak internal di wizard tidak menyertakan entity_id (penjual) & partner_id (pembeli) maupun rentang validitas, sehingga kontrak arah sebaliknya ikut terambil (find_one tanpa sort) — berbeda dari aturan interco_service yang menegakkan pasangan PT, sehingga UI bisa menjanjikan harga/kontrak yang saat create-interco tidak dipakai (atau justru 400). 3) 'Draft Interco undefined': endpoint create-interco mengembalikan get_by_pair() = {pair_id, seller, buyer}; FE membaca r.data.number yang tidak ada."
+}
