@@ -5,6 +5,7 @@ import { formatCurrency, formatQty } from "../../utils/formatters";
 import ErrorNotice from "../../components/ErrorNotice";
 import BlanketPOCreateModal from "./BlanketPOCreateModal";
 import BlanketPODetailPanel from "./BlanketPODetailPanel";
+import { ContractStatusPill as ContractStatusPillShared } from "./ContractStatusPill";
 
 /**
  * BlanketPOView (P2 — Blanket / Contract PO + call-off).
@@ -26,14 +27,7 @@ const TABS = [
 const fmtDate = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
 
 export function ContractStatusPill({ status }) {
-  const map = {
-    active: ["pill-success", "Aktif"],
-    exhausted: ["pill-info", "Habis"],
-    expired: ["pill-warning", "Kadaluarsa"],
-    closed: ["pill-muted", "Ditutup"],
-  };
-  const [cls, label] = map[status] || ["pill-muted", status || "—"];
-  return <span className={`status-pill ${cls}`} data-testid={`blanket-status-${status}`}>{label}</span>;
+  return <ContractStatusPillShared status={status} />; // re-export kompatibilitas
 }
 
 export default function BlanketPOView({ currentUser, selectedEntity }) {

@@ -123,12 +123,6 @@ export default function AdminView({
     }
     return "";
   };
-  const visibleRecords = useMemo(() => {
-    if (tab !== "products" || !lineFilter) return records;
-    const want = lineFilter.split(",").map((s) => s.trim()).filter(Boolean);
-    return (records || []).filter((r) => want.includes(String(r.line_code || "")));
-  }, [records, tab, lineFilter]);
-
   const saveProduct = async () => {
     const err = validateConversions();
     if (err) { setProductError(err); return; }
@@ -187,6 +181,15 @@ export default function AdminView({
     uoms, templates,
   };
   const records = RECORDS_BY_TAB[tab] || [];
+
+  // FASE L — penyaring lini pada Master Produk. WAJIB dideklarasikan SETELAH
+  // `records` (dulu di atasnya → TDZ "Cannot access before initialization" yang
+  // membuat seluruh halaman Produk & Harga blank di bundle produksi).
+  const visibleRecords = useMemo(() => {
+    if (tab !== "products" || !lineFilter) return records;
+    const want = lineFilter.split(",").map((s) => s.trim()).filter(Boolean);
+    return (records || []).filter((r) => want.includes(String(r.line_code || "")));
+  }, [records, tab, lineFilter]);
 
   const handleDryRunImport = async () => {
     if (!importFile) return;

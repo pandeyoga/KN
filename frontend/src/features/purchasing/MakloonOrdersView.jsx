@@ -8,17 +8,12 @@ import { Boxes, Plus, Search, ArrowRight, Factory } from "lucide-react";
 import EntityBadge from "../../components/EntityBadge";
 import ErrorNotice from "../../components/ErrorNotice";
 import LineFilter from "../../components/LineFilter";   // FASE L
+import { MKO_STATUS as MKO_STATUS_SHARED } from "./mkoStatus";
 import { formatQty } from "../../utils/formatters";
 import MakloonWizard from "./makloon/MakloonWizard";
 import MakloonOrderDetailPanel from "./MakloonOrderDetailPanel";
 
-export const MKO_STATUS = {
-  draft: { label: "Draf", cls: "pill-muted" },
-  in_process: { label: "Diproses", cls: "pill-info" },
-  partially_received: { label: "Sebagian", cls: "pill-warning" },
-  completed: { label: "Selesai", cls: "pill-success" },
-  cancelled: { label: "Batal", cls: "pill-danger" },
-};
+export const MKO_STATUS = MKO_STATUS_SHARED; // re-export untuk kompatibilitas impor lama
 const MODE_LABEL = { process_only: "Proses Saja", buy_process: "Beli + Proses" };
 const FILTERS = [
   { key: "", label: "Semua" }, { key: "draft", label: "Draf" },

@@ -31,6 +31,8 @@ import { StagePill, SubStatusChips } from "../../components/SoStatusBadges";
 import LineFilter from "../../components/LineFilter";   // FASE L
 import OrderDashboard from "./OrderDashboard";
 import { OrderDetailPanel } from "./OrderDetailPanel";
+import SOCompactPanel from "./SOCompactPanel";
+import DetailPopup from "../../components/DetailPopup";
 // FASE E-8 (E8.14 · US12) — "barang saya sampai mana?" adalah pertanyaan pelanggan yang
 // paling sering mampir ke sales, dan jawabannya dulu hanya ada di layar GUDANG (403 untuk
 // sales). Panel ini membawa jawabannya ke layar Pesanan, read-only.
@@ -70,6 +72,7 @@ export default function OrdersView({
   // "Perjalanan Pesanan" (riwayat + sumber pemenuhan). Dipisah sebagai sakelar,
   // bukan digabung, supaya panel aksi tidak terdorong ke bawah lipatan layar.
   const [detailPane, setDetailPane] = useState("detail");
+  const [showFullOrder, setShowFullOrder] = useState(false);
 
   // ── P2 — DAFTAR pesanan dipaginasi & dicari di SERVER ────────────────────────
   // Sebelumnya seluruh daftar (cap 200) ikut respons `/dashboard` lewat prop `orders`,
@@ -256,8 +259,8 @@ export default function OrdersView({
                 />
               </div>
               <div className="overflow-hidden">
-                <div className="grid grid-cols-[1fr_90px_90px_120px] bg-[#FAFBFC] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#6B6B73] border-b border-[#EFF0F2]">
-                  <span>Pesanan</span><span>Pelanggan</span><span>Total</span><span>Tahap</span>
+                <div className="grid grid-cols-[1fr_110px_95px_90px_66px_120px] gap-2 bg-[#FAFBFC] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#6B6B73] border-b border-[#EFF0F2]">
+                  <span>Pesanan</span><span>Pelanggan</span><span>Qty Pesan</span><span className="text-right">Total</span><span>Tanggal</span><span>Tahap</span>
                 </div>
                 <div className="divide-y divide-[#EFF0F2] max-h-[600px] overflow-y-auto">
                   {(loading || paged.loading) && (
@@ -272,11 +275,16 @@ export default function OrdersView({
                           : `Tidak ada pesanan berstatus “${statusFilter}” ${scopeSuffix(entities, selectedEntity)}.`}
                     </div>
                   )}
-                  {!paged.loading && filteredOrders.map((order) => (
+                  {!paged.loading && filteredOrders.map((order) => {
+                    /* UI/UX 2026-06 — kolom tengah dulu kosong; diisi qty & tanggal. */
+                    const its = order.items || [];
+                    const qty = its.reduce((s, it) => s + Number(it.qty ?? it.quantity ?? 0), 0);
+                    const units = [...new Set(its.map((it) => it.unit).filter(Boolean))];
+                    return (
                     <div 
                       data-testid={`order-card-${order.id}`} 
                       key={order.id}
-                      className={`grid grid-cols-[1fr_90px_90px_120px] items-center px-3 py-2.5 cursor-pointer hover:bg-[#FAFBFC] transition-colors ${
+                      className={`grid grid-cols-[1fr_110px_95px_90px_66px_120px] gap-2 items-center px-3 py-2.5 cursor-pointer hover:bg-[#FAFBFC] transition-colors ${
                         selectedOrder === order.id ? 'bg-[#EFF4FF] border-l-2 border-[#007AFF]' : ''
                       }`}
                       onClick={() => setSelectedOrder(order.id === selectedOrder ? null : order.id)}
@@ -303,15 +311,23 @@ export default function OrdersView({
                       <p data-testid={`order-customer-${order.id}`} className="text-[11px] text-[#3C3C43] truncate">
                         {order.customer_name}
                       </p>
-                      <p data-testid={`order-total-${order.id}`} className="text-[11.5px] font-bold tabular-nums">
+                      <div className="text-[11px] tabular-nums" data-testid={`order-qty-${order.id}`}>
+                        <p className="font-semibold">{new Intl.NumberFormat("id-ID").format(qty)} {units.length === 1 ? units[0] : ""}</p>
+                        <p className="text-[10px] text-[#6B6B73]">{its.length} item{units.length > 1 ? " · campuran" : ""}</p>
+                      </div>
+                      <p data-testid={`order-total-${order.id}`} className="text-right text-[11.5px] font-bold tabular-nums">
                         {formatCurrency(order.total_amount)}
+                      </p>
+                      <p className="text-[10.5px] text-[#6B6B73]" data-testid={`order-date-${order.id}`}>
+                        {order.created_at ? new Date(order.created_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short" }) : "—"}
                       </p>
                       <div className="flex flex-col items-start gap-0.5 min-w-0">
                         <StagePill order={order} testId={`order-status-${order.id}`} />
                         <SubStatusChips order={order} testIdPrefix={`order-row-substatus-${order.id}`} />
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
               {/* P2 — kontrol halaman daftar pesanan */}
@@ -347,6 +363,14 @@ export default function OrdersView({
                 {detailPane === "journey" ? (
                   <OrderJourneyPanel orderId={sel.id} orderNumber={sel.number} />
                 ) : (
+                  /* UI/UX 2026-06 — panel kanan = ringkasan; detail penuh + aksi di pop-up. */
+                  <SOCompactPanel order={sel}
+                    onClose={() => setSelectedOrder(null)}
+                    onOpenFull={() => setShowFullOrder(true)} />
+                )}
+
+                <DetailPopup open={showFullOrder} onClose={() => setShowFullOrder(false)}
+                  title={sel.number} subtitle={sel.customer_name} testId="so-detail-popup">
                   <OrderDetailPanel
                     order={sel}
                     user={user}
@@ -361,9 +385,9 @@ export default function OrdersView({
                     onMarkDelivered={withRefresh(onMarkDelivered)}
                     onIssueTaxInvoice={withRefresh(onIssueTaxInvoice)}
                     onOpenDocument={onOpenDocument}
-                    onClose={() => setSelectedOrder(null)}
+                    onClose={() => setShowFullOrder(false)}
                   />
-                )}
+                </DetailPopup>
               </div>
             ) : (
               <aside className="section-card flex items-center justify-center min-h-[200px] border-dashed">

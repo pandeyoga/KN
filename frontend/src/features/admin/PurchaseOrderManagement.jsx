@@ -350,8 +350,8 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
         {/* PO Table */}
         <div className="section-card">
           <div className="overflow-hidden">
-            <div className="grid grid-cols-[60px_1fr_120px_90px_60px] px-3 py-1.5 bg-[#FAFBFC] text-[10px] font-bold uppercase text-[#6B6B73] border-b border-[#EFF0F2]">
-              <span>Nomor</span><span>Supplier</span><span>Gudang</span><span>Items</span><span>Status</span>
+            <div className="grid grid-cols-[70px_1fr_110px_130px_105px_78px_70px] gap-2 px-3 py-1.5 bg-[#FAFBFC] text-[10px] font-bold uppercase text-[#6B6B73] border-b border-[#EFF0F2]">
+              <span>Nomor</span><span>Supplier</span><span>Gudang</span><span>Qty Pesan / Terima</span><span className="text-right">Total</span><span>Tanggal</span><span>Status</span>
             </div>
             {loading ? (
               <div className="py-8 text-center text-[12px] text-[#6B6B73]">Memuat…</div>
@@ -362,20 +362,36 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
               </div>
             ) : (
               <div className="divide-y divide-[#EFF0F2]">
-                {pos.map((po) => (
+                {pos.map((po) => {
+                  /* UI/UX 2026-06 — kolom tengah dulu kosong melompong; sekarang diisi
+                     qty pesan vs terima + tanggal supaya tabel informatif tanpa buka detail. */
+                  const items = po.items || [];
+                  const qOrder = items.reduce((s, it) => s + Number(it.quantity || 0), 0);
+                  const qRecv = items.reduce((s, it) => s + Number(it.received_qty || 0), 0);
+                  const units = [...new Set(items.map((it) => it.unit).filter(Boolean))];
+                  const unit = units.length === 1 ? units[0] : "";
+                  return (
                   <div key={po.id} data-testid={`po-card-${po.id}`}
-                    className={`grid grid-cols-[60px_1fr_120px_90px_60px] items-center px-3 py-2.5 cursor-pointer hover:bg-[#FAFBFC] transition-colors ${selectedPO?.id === po.id ? "bg-[#EFF4FF] border-l-2 border-[#007AFF]" : ""}`}
+                    className={`grid grid-cols-[70px_1fr_110px_130px_105px_78px_70px] gap-2 items-center px-3 py-2.5 cursor-pointer hover:bg-[#FAFBFC] transition-colors ${selectedPO?.id === po.id ? "bg-[#EFF4FF] border-l-2 border-[#007AFF]" : ""}`}
                     onClick={() => handleViewDetail(po.id)}>
                     <p data-testid={`po-number-${po.id}`} className="text-[12px] font-bold text-[#007AFF]">{po.po_number}</p>
                     <div className="min-w-0">
                       <p data-testid={`po-supplier-${po.id}`} className="text-[11.5px] font-semibold truncate">{po.supplier_name}</p>
-                      <p className="text-[10.5px] text-[#6B6B73] tabular-nums">{formatCurrency(po.grand_total ?? po.total_amount)}</p>
+                      <p className="text-[10.5px] text-[#6B6B73]">{items.length} item</p>
                     </div>
                     <p className="text-[11px] text-[#3C3C43] truncate">{po.warehouse_name}</p>
-                    <p className="text-[11.5px] text-[#6B6B73]">{po.items?.length || 0} item</p>
+                    <div className="text-[11px] tabular-nums" data-testid={`po-qty-${po.id}`}>
+                      <p className="font-semibold">{new Intl.NumberFormat("id-ID").format(qOrder)} {unit}</p>
+                      <p className={`text-[10px] ${qRecv >= qOrder && qOrder > 0 ? "text-green-600" : "text-[#6B6B73]"}`}>
+                        terima {new Intl.NumberFormat("id-ID").format(qRecv)}{qOrder > 0 ? ` (${Math.round((qRecv / qOrder) * 100)}%)` : ""}
+                      </p>
+                    </div>
+                    <p className="text-right text-[11.5px] font-bold tabular-nums" data-testid={`po-total-${po.id}`}>{formatCurrency(po.grand_total ?? po.total_amount)}</p>
+                    <p className="text-[10.5px] text-[#6B6B73]">{po.created_at ? new Date(po.created_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short" }) : "—"}</p>
                     {getStatusBadge(po.status)}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

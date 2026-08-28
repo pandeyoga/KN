@@ -1,0 +1,77 @@
+/**
+ * SOCompactPanel — RINGKASAN pesanan di panel kanan daftar SO (2026-06).
+ * Pola yang sama dengan POCompactPanel: panel samping = fakta kunci tanpa scroll;
+ * seluruh detail + tombol aksi lifecycle dibuka lewat "Lihat detail & aksi"
+ * (pop-up berisi `OrderDetailPanel` yang sama — satu sumber tampilan & aksi).
+ */
+import { Check, Maximize2, XCircle } from "lucide-react";
+import { formatCurrency } from "../../utils/formatters";
+import { StagePill, SubStatusChips } from "../../components/SoStatusBadges";
+import EntityBadge from "../../components/EntityBadge";
+
+export default function SOCompactPanel({ order, onClose, onOpenFull }) {
+  if (!order) return null;
+  const its = order.items || [];
+  const qty = its.reduce((s, it) => s + Number(it.qty ?? it.quantity ?? 0), 0);
+  const units = [...new Set(its.map((it) => it.unit).filter(Boolean))];
+  const paid = order.payment_status === "paid";
+
+  return (
+    <div className="section-card self-start" data-testid="so-compact-panel">
+      <div className="section-head">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-[#0058CC]">
+            {order.number} <EntityBadge entityId={order.entity_id} />
+          </p>
+          <div className="mt-1 flex flex-col items-start gap-0.5">
+            <StagePill order={order} testId="so-compact-stage" />
+            <SubStatusChips order={order} testIdPrefix="so-compact-substatus" />
+          </div>
+        </div>
+        <button className="icon-button" onClick={onClose} data-testid="so-compact-close"><XCircle size={14} /></button>
+      </div>
+
+      <div className="section-body space-y-2.5">
+        <div className="grid grid-cols-2 gap-2 text-[11.5px]">
+          <div className="rounded-md border border-[#EFF0F2] bg-[#FAFBFC] p-2">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase text-[#6B6B73]">Pelanggan</p>
+            <p className="truncate font-semibold">{order.customer_name}</p>
+            <p className="truncate text-[10.5px] text-[#6B6B73]">{order.sales_name ? `Sales: ${order.sales_name}` : ""}</p>
+          </div>
+          <div className="rounded-md border border-[#EFF0F2] bg-[#FAFBFC] p-2">
+            <p className="mb-0.5 text-[10px] font-semibold uppercase text-[#6B6B73]">Qty Pesan</p>
+            <p className="font-semibold tabular-nums">{new Intl.NumberFormat("id-ID").format(qty)} {units.length === 1 ? units[0] : ""}</p>
+            <p className="text-[10.5px] text-[#6B6B73]">{its.length} item{units.length > 1 ? " · unit campuran" : ""}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between rounded-md border border-[#EFF0F2] bg-[#FAFBFC] px-2.5 py-2 text-[11.5px]">
+          <span className="text-[#6B6B73]">Grand Total</span>
+          <span data-testid="so-compact-total" className="font-bold tabular-nums text-[#007AFF]">
+            {formatCurrency(order.grand_total != null ? order.grand_total : order.total_amount)}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+          <span className={`inline-flex items-center gap-1 font-semibold ${paid ? "text-green-600" : "text-[#B26A00]"}`}
+            data-testid="so-compact-payment">
+            {paid ? <><Check size={12} /> Lunas</> : "Belum bayar"}
+            {order.payment_terms ? <span className="font-normal text-[#6B6B73]"> · {order.payment_terms}</span> : null}
+          </span>
+          <span className="text-[#6B6B73]">
+            {order.created_at ? new Date(order.created_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) : ""}
+          </span>
+        </div>
+        {order.has_backorder && (
+          <p className="rounded-md border border-[#F6D3C4] bg-[#FFF1EA] px-2.5 py-1.5 text-[11px] font-semibold text-[#B23B14]">
+            Ada backorder — sebagian qty menunggu stok.
+          </p>
+        )}
+
+        <button type="button" data-testid="so-open-full-detail" onClick={onOpenFull}
+          className="secondary-button w-full justify-center">
+          <Maximize2 size={13} /> Lihat detail &amp; aksi
+        </button>
+      </div>
+    </div>
+  );
+}

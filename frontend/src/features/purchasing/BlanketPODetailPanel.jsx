@@ -3,7 +3,7 @@ import axios, { API } from "../../services/apiClient";
 import { FileStack, XCircle, PackagePlus, Ban, Calendar, Truck, AlertCircle } from "lucide-react";
 import { formatCurrency, formatQty } from "../../utils/formatters";
 import { getStatusBadge } from "../admin/po/poUtils";
-import { ContractStatusPill } from "./BlanketPOView";
+import { ContractStatusPill } from "./ContractStatusPill";
 import CallOffModal from "./CallOffModal";
 import ConfirmModal from "../../components/ConfirmModal";
 

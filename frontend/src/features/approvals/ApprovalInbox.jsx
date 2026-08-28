@@ -457,6 +457,11 @@ export default function ApprovalInbox({ currentUser, onNavigate, onOpenDocument 
       {reviewItem && (
         <ApprovalDecisionModal item={reviewItem} currentUser={currentUser}
           meta={KIND_META[reviewItem.kind]}
+          queuePos={(() => {
+            const i = filtered.findIndex((x) => x.kind === reviewItem.kind && x.id === reviewItem.id);
+            return i >= 0 ? i + 1 : null;
+          })()}
+          queueTotal={filtered.length}
           onClose={() => setReviewItem(null)}
           onOpenFull={() => { const it = reviewItem; setReviewItem(null); handleReview(it); }}
           onDecided={(msg) => {

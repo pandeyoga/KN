@@ -16,7 +16,7 @@ import ConfirmModal from "../../components/ConfirmModal";
 import DocumentActionsBar from "../documents/DocumentActionsBar";
 import MakloonClaimPanel from "./makloon/MakloonClaimPanel";
 import { recordService } from "./makloon/makloonApi";
-import { MKO_STATUS } from "./MakloonOrdersView";
+import { MKO_STATUS } from "./mkoStatus";
 import { overlayDismiss } from "@/utils/overlayDismiss";
 import QtyDual from "../../components/QtyDual";      // FASE U — dua satuan
 import { uomSelectOptions } from "../../utils/uomCatalog";   // FASE U — satuan dari master

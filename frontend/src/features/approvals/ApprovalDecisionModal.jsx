@@ -256,7 +256,7 @@ function DetailBody({ item, doc }) {
   return null;
 }
 
-export default function ApprovalDecisionModal({ item, currentUser, onClose, onOpenFull, onDecided, meta }) {
+export default function ApprovalDecisionModal({ item, currentUser, onClose, onOpenFull, onDecided, meta, queuePos = null, queueTotal = 0 }) {
   const [doc, setDoc] = useState(null);
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState("");
@@ -325,6 +325,14 @@ export default function ApprovalDecisionModal({ item, currentUser, onClose, onOp
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {/* SISA ANTREAN (2026-06) — pemutus tahu posisinya: "3 dari 7". */}
+            {queuePos != null && queueTotal > 0 && (
+              <span data-testid="decision-queue-pos"
+                className="rounded-full bg-[#F2F2F7] px-2 py-0.5 text-[10.5px] font-bold tabular-nums text-[#6B6B73]"
+                title="Posisi dokumen ini dalam antrean saringan aktif">
+                {queuePos} dari {queueTotal}
+              </span>
+            )}
             {item.amount != null && (
               <span className="text-[14px] font-bold tabular-nums text-[#1C1C1E]"
                 data-testid="decision-modal-amount">{formatCurrency(item.amount)}</span>

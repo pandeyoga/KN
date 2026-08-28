@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend-only verification of the TDZ blank-page fix and 4 UI features on the prebuilt static bundle. Independently crawled every sidebar item for admin (52), manager (44) and finance (14) with pageerror listeners: ZERO blank pages, ZERO pageerrors, ZERO console errors. Verified: (1) nav-products-pricing renders (Produk Master table + all 8 hub tabs incl. Kategori & Pricelist per-PT) with no 'Cannot access before initialization'; (2) Pembelian → Pesanan Pembelian all 5 hub tabs render incl. previously circular-import 'Blanket / Kontrak' and 'Order Makloon'; (3) SO compact panel (so-compact-panel) shows stage pill, pelanggan, qty pesan, grand total, payment; so-open-full-detail opens so-detail-popup with full OrderDetailPanel; Confirm action inside popup succeeded (SO-0007 Disetujui → Terkonfirmasi, list KPI Dipesan 3→2), Esc and so-detail-popup-close both close the popup and keep the compact panel; (4) SO list order-qty-{id}/order-date-{id} (9 each) and PO list po-qty-{id} (qty + 'terima N (x%)') / date / po-total-{id} (12 each) render without overlap; (5) manager Pusat Persetujuan decision popup decision-queue-pos shows '1 dari 5' matching the 'Semua 5' filtered tab, and after Setujui it advances to the next doc with '1 dari 4' plus a guiding toast. Regressions OK: Beranda admin, Meja Finance, POS 'Semua Filter' modal, Retur detail (Draf→Persetujuan→Inspeksi 4-Titik→Penyelesaian stepper + eligibility/nota kredit).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Produk & Harga → tab 'Produk (Master)'", "issues": ["Large empty ~300px left column (detail/placeholder panel renders nothing, not even an empty-state), pushing the Records card to the right and leaving a big white gap"]},
+      {"screen": "Retur & Barang Sisa → detail SRET-00003 'ITEM YANG DIRETUR' table", "issues": ["Unit duplicated: '10 yard' followed by another 'yard' in the Sat. column", "'Alasan' text (Warna tidak sesuai contoh) is clipped/visually collides with the Harga column", "Row baselines misaligned (product name sits lower than qty/kondisi cells)"]},
+      {"screen": "Daftar Pesanan (SO list) vs SO detail", "issues": ["Column header 'TOTAL' shows order.total_amount (pre-PPN, e.g. Rp 4.375.000) while compact panel/detail show Grand Total incl. PPN (Rp 4.856.250) — same document appears with two different amounts; consider labelling the column 'Subtotal' or using grand_total"]},
+      {"screen": "SO detail popup — Ringkasan Harga", "issues": ["Label reads 'PPN 12%' but the amount is 11% of subtotal (15.700.000 → 1.727.000). Frontend renders sel.ppn_rate as-is, so the mismatch comes from the order data (ppn_rate=12 stored with an 11% amount) — data/seed inconsistency, cosmetic but confusing"]}
+    ]
+  },
+  "test_report_links": ["/app/scripts/crawl_blank.py"],
+  "action_items": [
+    "Fill or hide the empty left column on the 'Produk (Master)' hub tab (render an empty-state or make the table full width)",
+    "Fix Retur detail item table: remove duplicated unit, give the Alasan column its own width so it stops colliding with Harga, align row baselines",
+    "Align SO list 'TOTAL' column with the detail Grand Total (rename to Subtotal or show grand_total)",
+    "Investigate order ppn_rate=12 stored against an 11% ppn_amount (data/seed) so 'PPN 12%' label matches the number"
+  ],
+  "critical_code_review_comments": [
+    "AdminView.jsx visibleRecords useMemo is now correctly declared after `records`; no remaining TDZ pattern found on the crawled routes.",
+    "OrdersView.jsx renders both SOCompactPanel and the full OrderDetailPanel inside DetailPopup; the OrderDetailPanel keeps its own internal close (XCircle) button inside the popup in addition to so-detail-popup-close — two visually different closes in one modal is redundant UX (both work).",
+    "SO list total uses order.total_amount while SOCompactPanel uses grand_total — pick one source for the money column to avoid mismatched figures."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (unchanged per request)", "frontend": "100% of requested flows passed (6/6)"},
+  "seed_data_creation": "No new records created. Test actions mutated demo data: SO-0007 confirmed (Disetujui → Terkonfirmasi) and stock-opname approval 'Opname Bandung — Spot Check' approved by manager (pending queue 21 → 20). Restore with `python seed_realistic.py` + `python seed_e9_chain_demo.py` if a pristine demo state is needed.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@/manager@/finance@kainnusantara.id · demo12345 · entity scope-pick-ent_ksc",
+  "context_for_next_testing_agent": "Static bundle: never run yarn start; after src edits run `bash /app/scripts/rebuild_frontend.sh`. Sidebar nav ids: penjualan group → nav-sales-orders (NOT nav-orders), nav-products-pricing, nav-pos; pembelian group → nav-purchase-orders. Hub tabs: hub-tab-orders (then click text 'Daftar Pesanan' for the list sub-tab), hub-tab-purchasing, hub-tab-blanket-po, hub-tab-makloon-orders. Approval decision modal testids: decision-modal-approve/reject/close/open-full, decision-queue-pos. SO popup: so-compact-panel, so-open-full-detail, so-detail-popup, so-detail-popup-close; SO actions inside popup: confirm-order-button-{id}, release-reservation-button-{id}, cancel-order-button-{id}. Crawler /app/scripts/crawl_blank.py <email> prints blank/error pages per role (~2-4 min per role) — all three roles clean in this iteration. Remaining open items are cosmetic (see design_issues).",
+  "rca_of_the_issue": "Original blank pages were a TDZ ReferenceError (visibleRecords useMemo referencing `records` before initialization) plus two circular imports. Re-verified after the fix: no pageerror events on any of the 110 crawled route/tab combinations across three roles, so the fix holds."
+}
