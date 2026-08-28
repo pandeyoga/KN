@@ -1492,3 +1492,67 @@ async def _resolve_return_warehouse(order_id: str) -> str:
 
     wh = await db.warehouses.find_one({}, sort=[("created_at", 1)])
     return wh["id"] if wh else "wh_default"
+
+
+# ─── RETUR MULTI-LEG (2026-06) — kaki perjalanan fisik terjahit ke dokumen retur ──
+async def relocate_return_rolls(return_id: str, to_warehouse_id: str,
+                                actor: str, note: str = "") -> Dict[str, Any]:
+    """Pindahkan roll karantina milik retur ini ke gudang lain (mis. Gudang Jakarta →
+    Gedung Retur Central untuk inspeksi). Kaki (leg) dicatat di dokumen retur
+    (`relocation_legs[]`) + movements ber-source retur → tampil di Jejak Barang.
+    Kepemilikan TIDAK berubah (bukan interco); balance di-rebuild dua sisi."""
+    from services.roll_service import rebuild_balance
+    ret = await db.sales_returns.find_one({"id": return_id}, {"_id": 0})
+    if not ret:
+        raise ValueError("Retur tidak ditemukan")
+    wh_to = await db.warehouses.find_one({"id": to_warehouse_id}, {"_id": 0, "name": 1})
+    if not wh_to:
+        raise ValueError("Gudang tujuan tidak ditemukan")
+    rolls = await db.inventory_rolls.find(
+        {"acquired.ref_id": return_id, "acquired.via": "return", "status": "quarantine",
+         "warehouse_id": {"$ne": to_warehouse_id}}, {"_id": 0}).to_list(500)
+    if not rolls:
+        raise ValueError("Tidak ada roll karantina retur ini yang bisa dipindah "
+                          "(sudah di gudang tujuan / sudah dilepas).")
+    now = now_iso()
+    from_ids = {}
+    segs = set()
+    total_qty = 0.0
+    for r in rolls:
+        from_ids.setdefault(r["warehouse_id"], 0)
+        from_ids[r["warehouse_id"]] += 1
+        total_qty += float(r.get("length_remaining") or 0)
+        await db.inventory_rolls.update_one({"id": r["id"]}, {"$set": {
+            "warehouse_id": to_warehouse_id, "bin_id": None,
+            "journey.stage": "received_transit", "journey.routing": "store",
+            "journey.updated_at": now, "updated_at": now}})
+        await db.rfid_tags.update_one({"roll_id": r["id"], "status": "active"},
+                                      {"$set": {"warehouse_id": to_warehouse_id}})
+        for wh, mtype in ((r["warehouse_id"], "return_relocation_out"),
+                          (to_warehouse_id, "return_relocation_in")):
+            await db.inventory_movements.insert_one({
+                "id": new_id("mov"), "product_id": r["product_id"], "warehouse_id": wh,
+                "owner_entity_id": r.get("owner_entity_id"),
+                "movement_type": mtype,
+                "quantity": (1 if mtype.endswith("_in") else -1) * float(r.get("length_remaining") or 0),
+                "unit": r.get("unit", "meter"), "lot": r.get("lot", ""), "roll_id": r["id"],
+                "qty_rolls": 1, "source_document": ret.get("number", return_id),
+                "timestamp": now,
+            })
+        segs.add((r["product_id"], r["warehouse_id"], r.get("owner_entity_id")))
+        segs.add((r["product_id"], to_warehouse_id, r.get("owner_entity_id")))
+    for pid, wid, owner in segs:
+        await rebuild_balance(pid, wid, owner)
+    from_names = []
+    for wid in from_ids:
+        w = await db.warehouses.find_one({"id": wid}, {"_id": 0, "name": 1}) or {}
+        from_names.append(w.get("name", wid))
+    leg = {"id": new_id("leg"), "from_warehouses": from_names,
+           "to_warehouse_id": to_warehouse_id, "to_warehouse_name": wh_to.get("name", ""),
+           "roll_count": len(rolls), "qty": round(total_qty, 2),
+           "note": (note or "").strip(), "by": actor, "at": now}
+    await db.sales_returns.update_one({"id": return_id}, {
+        "$push": {"relocation_legs": leg},
+        "$set": {"updated_at": now}})
+    return {"leg": leg, "moved": len(rolls),
+            "legs": ((ret.get("relocation_legs") or []) + [leg])}

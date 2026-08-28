@@ -948,3 +948,34 @@ pasangan) DIPERBAIKI + pesan interco 'undefined' di FE diperbaiki (buyer.number)
 - Dokumentasi API middleware Kotlin (API_MIDDLEWARE.md) — endpoint sudah final.
 - Retur fisik multi-leg penuh (kaki transfer Jakarta→Central terjahit dokumen retur).
 - Opsional UI: link aksi dari device stale ke halaman Devices.
+
+---
+## NOTIF ALARM + DASHBOARD WMS + RETUR MULTI-LEG (2026-06 · iteration_267)
+### Yang dibangun
+- **Notifikasi Alarm**: `rfid_incident_service.create_from_read` → hook
+  `create_notification` (type=rfid_gate_alarm, severity=critical,
+  recipient_role=warehouse, ref=incident id, link cs-rfid-gate; dedupe unread per
+  insiden; hits++ TIDAK memicu notif baru). Tampil di lonceng NotificationCenter
+  (juga ikut kanal WhatsApp best-effort existing).
+- **Dashboard Kesehatan Gudang**: `services/wms_health_service.py` +
+  `GET /api/wms/health-dashboard` (totals 7 metrik + per gudang: insiden terbuka,
+  red reads hari ini, antrean putaway, PA aktif, gate exception, roll tanpa tag,
+  opname terakhir, device stale; urut prioritas). UI: tab "Kesehatan"
+  (`WmsHealthDashboard.jsx`) di Operasi Gudang (WMS).
+  KEPUTUSAN: metrik insiden/red-reads/device SENGAJA lintas-entitas (keamanan
+  fisik gudang shared); metrik roll/PA ber-scope entitas.
+- **Retur Multi-Leg**: `return_service.relocate_return_rolls` +
+  `POST /api/sales-returns/{id}/relocate` — pindah roll karantina retur antar
+  gudang; `relocation_legs[]` terjahit di dokumen retur; movements
+  return_relocation_in/out ber-source nomor retur → tampil di Jejak Barang;
+  journey di-stamp received_transit (masuk pipeline print-tag-baru → PA
+  grade-aware). UI: blok "Perjalanan Fisik Retur (Multi-Leg)" di panel Karantina
+  retur (KNSelect, tujuan = lokasi roll sekarang disaring, tombol dinonaktifkan
+  bila tak ada yang bisa dipindah).
+### Verifikasi
+iteration_267: backend 18/18 baru + regresi 99 passed/2 skipped; frontend 100%
+(lonceng alarm, tab Kesehatan, relokasi retur + leg). 2 polesan UX opsional
+diterapkan setelahnya (KNSelect + guard tombol), build OK.
+### Backlog berikutnya
+- Dokumentasi API middleware Kotlin (API_MIDDLEWARE.md).
+- Opsional: filter entitas eksplisit pada daftar insiden bila kelak dibutuhkan.

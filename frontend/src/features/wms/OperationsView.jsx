@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Layers, PackageCheck, Truck, ArrowLeftRight, ClipboardCheck } from "lucide-react";
+import { Layers, PackageCheck, Truck, ArrowLeftRight, ClipboardCheck, Activity } from "lucide-react";
 import InventoryStockView from "./InventoryStockView";
 import InboundScanInterface from "./InboundScanInterface";
 import OutboundScanInterface from "./OutboundScanInterface";
 import TransferManagement from "./TransferManagement";
 import CycleCount from "../inventory/CycleCount";
+import WmsHealthDashboard from "./WmsHealthDashboard";
 import WaitingBoardsStrip from "../../components/WaitingBoardsStrip";
 import { can } from "../../config/roles";
 
@@ -41,6 +42,7 @@ export default function OperationsView({
     { id: "outbound", label: "Barang Keluar",     icon: Truck,         desc: "Ambil & kirim SO" },
     { id: "transfer", label: "Transfer",     icon: ArrowLeftRight, desc: "Pindah antar gudang" },
     { id: "cycle",    label: "Stock Opname",  icon: ClipboardCheck, desc: "Hitung fisik stok" },
+    { id: "health",   label: "Kesehatan",  icon: Activity, desc: "Ringkasan insiden, opname & antrean per gudang" },
   ];
   // AUDIT SALES vs ADMIN SALES (2026-08-15) — tab disaring per IZIN, bukan per peran.
   // Admin Sales diberi `wms.view` supaya bisa MEMANTAU progres gudang, tetapi tab
@@ -153,6 +155,11 @@ export default function OperationsView({
       {/* CYCLE COUNT TAB */}
       {activeTab === "cycle" && (
         <CycleCount key={`cycle-${boardsVersion}`} token={token} warehouses={data.warehouses || []} products={data.products || []} userRole={user?.role} />
+      )}
+
+      {/* KESEHATAN TAB — ringkasan insiden, opname & antrean per gudang */}
+      {activeTab === "health" && (
+        <WmsHealthDashboard selectedEntity={selectedEntity} />
       )}
     </div>
   );

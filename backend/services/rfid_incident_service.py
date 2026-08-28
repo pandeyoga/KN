@@ -27,8 +27,9 @@ async def create_from_read(read: Dict[str, Any]) -> None:
         await db.rfid_incidents.update_one({"id": dup["id"]}, {
             "$inc": {"hits": 1}, "$set": {"last_at": now_iso(), "reason": read.get("reason", "")}})
         return
+    inc_id = new_id("rinc")
     await db.rfid_incidents.insert_one({
-        "id": new_id("rinc"), "read_id": read.get("id"), "epc": read.get("epc"),
+        "id": inc_id, "read_id": read.get("id"), "epc": read.get("epc"),
         "roll_id": read.get("roll_id"), "roll_no": read.get("roll_no"),
         "sku": read.get("sku"), "product_name": read.get("product_name"),
         "device_id": read.get("device_id"), "device_name": read.get("device_name"),
@@ -40,6 +41,23 @@ async def create_from_read(read: Dict[str, Any]) -> None:
         "ack_by": None, "ack_at": None, "resolved_by": None, "resolved_at": None,
         "notes": [],
     })
+    # NOTIFIKASI REAL-TIME kepala gudang (best-effort — alarm tak boleh gagal karenanya)
+    try:
+        from services.notification_service import create_notification
+        wh = await db.warehouses.find_one({"id": read.get("warehouse_id")},
+                                          {"_id": 0, "name": 1}) or {}
+        await create_notification(
+            notif_type="rfid_gate_alarm",
+            title=f"🔴 ALARM GATE MERAH — {wh.get('name', 'Gudang')}",
+            body=(f"{read.get('roll_no') or read.get('epc')} ditahan di "
+                  f"{read.get('device_name', 'gate')}: {read.get('reason', '')} "
+                  f"Segera acknowledge di layar Alarm & Keamanan."),
+            severity="critical", link="cs-rfid-gate",
+            entity_id=read.get("owner_entity_id"),
+            recipient_role="warehouse", ref=inc_id, dedupe=True,
+        )
+    except Exception:
+        pass
 
 
 async def list_incidents(status: Optional[str], warehouse_id: Optional[str],

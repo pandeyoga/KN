@@ -694,3 +694,27 @@ async def delete_attachment(return_id: str, att_id: str, request: Request) -> Di
     await audit(user.get("name", ""), "sales_return_attachment_deleted", "sales_return", return_id,
                 {"attachment_id": att_id})
     return {"ok": True}
+
+
+# ─── RETUR MULTI-LEG — kaki perjalanan fisik terjahit ke dokumen retur ────────
+class RelocatePayload(BaseModel):
+    to_warehouse_id: str
+    note: Optional[str] = ""
+
+
+@router.post("/sales-returns/{return_id}/relocate")
+async def relocate_return(return_id: str, payload: RelocatePayload, request: Request) -> Dict[str, Any]:
+    user = await require_permission(request, "sales_return", "update")
+    ctx = await entity_ctx(request)
+    ret = await db.sales_returns.find_one({"id": return_id}, {"_id": 0})
+    if not ret:
+        raise HTTPException(status_code=404, detail="Retur tidak ditemukan")
+    assert_entity_access(ret, "sales_returns", ctx)
+    try:
+        res = await return_service.relocate_return_rolls(
+            return_id, payload.to_warehouse_id, user.get("name", ""), payload.note or "")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    await audit(user.get("name", ""), "sales_return_relocated", "sales_return", return_id,
+                {"to": payload.to_warehouse_id, "moved": res["moved"]})
+    return res

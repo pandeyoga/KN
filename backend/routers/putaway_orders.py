@@ -80,3 +80,11 @@ async def post_resolve(order_id: str, payload: PAResolvePayload, request: Reques
     await audit(actor["name"], "putaway_exception_resolved", "putaway_order", order_id,
                 {"action": payload.action, "rolls": len(payload.roll_ids)})
     return order
+
+
+@router.get("/wms/health-dashboard")
+async def get_wms_health(request: Request) -> Dict[str, Any]:
+    """DASHBOARD KESEHATAN GUDANG — insiden, opname, antrean putaway, device."""
+    await require_permission(request, "wms", "view")
+    from services.wms_health_service import health_dashboard
+    return await health_dashboard(await _scope(request))

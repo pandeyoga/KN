@@ -1,0 +1,41 @@
+{
+  "summary": "Iterasi 267 — uji 3 fitur baru di atas R0-R7. BACKEND: 18/18 pytest baru hijau (tests/test_iter267_notif_health_multileg.py) + regresi 99 passed/2 skipped (iter263-266). (1) NOTIF ALARM: POST /api/rfid/ingest (X-Device-Key gate keluar Bandung) dengan EPC roll available → result red, insiden open dibuat, db.notifications type=rfid_gate_alarm severity=critical recipient_role=warehouse ref=<incident id>, read=false; pembacaan ulang → hits++ TANPA notifikasi baru (dedupe unread per ref) dan insiden tetap 1; GET /api/notifications sbg warehouse@ menampilkan alarm; device key palsu → 401/403. (2) HEALTH DASHBOARD: GET /api/wms/health-dashboard (X-Entity-Id: all) → totals 7 metrik, warehouses[] 10 baris, sum(rows)==totals, urutan prioritas benar, devices_total == jumlah rfid_devices di DB, open_incidents identik dengan GET /api/rfid/incidents?status=open, Bandung Kopo last_cc accuracy_pct 92.3 (cc_number kini CC00008 — opname terbaru, bukan CC00001 spt catatan lama), tanpa token → 403. (3) RETUR MULTI-LEG: POST /api/sales-returns/{id}/relocate → moved=1, leg (from_warehouses→Gedung Retur, roll_count, qty, by), roll.warehouse_id pindah + journey.stage=received_transit, 2 movements return_relocation_in/out ber-source nomor retur (SRET-000xx) dengan tanda kuantitas benar, balance gudang tujuan terbangun; panggilan kedua → 400 'Tidak ada roll karantina...'; gudang tujuan bogus → 400; retur tak ada → 404; scope 'all' → ditolak; retur entitas lain → ditolak; GET journey-timeline roll menampilkan return_relocation_in + nomor retur. FRONTEND (Playwright, static build sudah memuat testid baru): lonceng warehouse@ menampilkan '🔴 ALARM GATE MERAH — Gudang Bandung Kopo' + lencana GUDANG, tersaring di filter severity 'Penting/critical'; tab Kesehatan (wms-tab-health) merender wms-health-dashboard dengan 6 kartu total (11/53/4/0/0/9) + tabel 10 gudang berkolom insiden/red/antrean/PA/exception/tanpa tag/opname(92.3% CC00008)/device(2/3 hidup), tombol Segarkan bekerja, tab Barang Masuk/Barang Keluar tetap tampil; halaman Retur → SRET-00004 menampilkan blok return-relocate-block dengan riwayat leg lama, SRET-00012 → pilih Gedung Retur → tombol → pesan sukses '1 roll dikirim ke Gedung Retur — leg tercatat', leg baru muncul, kolom Lokasi roll berubah ke Gedung Retur; klik kedua menampilkan pesan galat 400 di quarantine-err.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/wms/health-dashboard", "issue": "open_incidents / red_reads_today / device counters TIDAK di-scope entitas (hanya rolls/putaway yang pakai scope_ids). Saat X-Entity-Id=ent_ksc angka insiden tetap menghitung insiden entitas lain — campur metrik ber-scope & tak ber-scope dalam satu baris."},
+      {"endpoint": "GET /api/rfid/incidents", "issue": "Respon identik untuk X-Entity-Id=all dan ent_ksc (list_incidents tak memfilter owner_entity_id). Konsisten dengan dashboard, tetapi perlu keputusan eksplisit apakah insiden fisik memang lintas-entitas."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Retur multi-leg (relokasi)", "issue": "Setelah relokasi sukses, dropdown tujuan + tombol tetap aktif dan masih memuat gudang tujuan yang SAMA (dan gudang asal), sehingga klik ulang berujung HTTP 400 di console + banner galat. Idealnya opsi gudang tempat roll berada sekarang di-nonaktifkan / tombol dimatikan bila tak ada roll karantina yang bisa pindah.", "affected_selectors": ["return-relocate-dest", "return-relocate-btn", "quarantine-err"]}
+    ],
+    "design_issues": [
+      {"screen": "Retur — blok Perjalanan Fisik Retur", "issues": ["memakai <select> native, bukan komponen KNSelect yang dipakai di seluruh aplikasi (inkonsistensi & tidak mengikuti pola testid {testId}-option-{value})"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter267_notif_health_multileg.py",
+    "/app/test_reports/pytest/iter267.xml"
+  ],
+  "action_items": [
+    "OPSIONAL (minor): putuskan scope entitas untuk open_incidents/red_reads pada health-dashboard — sekarang tak ber-scope sementara metrik roll ber-scope.",
+    "OPSIONAL (minor UX): nonaktifkan opsi gudang tujuan = lokasi roll sekarang / matikan tombol relokasi bila tak ada roll karantina yang dapat dipindah (hindari 400 yang dapat dipicu pengguna).",
+    "OPSIONAL: ganti <select> native pada return-relocate-dest ke KNSelect agar seragam."
+  ],
+  "critical_code_review_comments": [
+    "services/wms_health_service.py: agregasi insiden/red-reads/devices tidak menerima scope_ids — sebaiknya seragam agar angka bisa dibuktikan dari layar per entitas.",
+    "services/return_service.py relocate_return_rolls: tidak ada guard untuk to_warehouse_id == gudang saat ini pada level dokumen (dijaga oleh filter $ne pada roll, jadi aman) — tetapi pesan 400 yang sama dipakai untuk dua sebab berbeda (sudah di tujuan vs sudah dilepas); pertimbangkan pesan terpisah.",
+    "Hook notifikasi di rfid_incident_service.create_from_read dibungkus try/except pass (best-effort, benar) — namun kegagalan tidak dicatat ke log sehingga alarm yang gagal terkirim tak terlihat operator."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter267_notif_health_multileg.py"],
+  "success_rate": {"backend": "100% (18/18 baru; regresi 99 passed/2 skipped)", "frontend": "100% alur inti (notif bell, tab Kesehatan, retur multi-leg)"},
+  "seed_data_creation": "Tidak ada data demo yang dihapus. Uji memicu insiden gate + notifikasi alarm baru (RL-00015/16/45 dsb) dan memindahkan roll karantina retur sret_ac9c38033895 (via API) & SRET-00012/sret_44f194461f48 (via UI) ke Gedung Retur (wh_6baed091f26e) — leg tercatat.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@kainnusantara.id / demo12345; warehouse@kainnusantara.id / demo12345; X-Entity-Id: ent_ksc; device key gate keluar Bandung: dk_5a0e33d207f8076061a34655ff8ef78a (rdev_b1bc75a4db04)",
+  "context_for_next_testing_agent": "test_iter267_notif_health_multileg.py memilih EPC/retur secara dinamis lewat pymongo (read-only) sehingga bisa dijalankan berulang; tiap run menambah insiden open + memindahkan 1 retur karantina baru ke Gedung Retur — retur kandidat menipis (tersisa SRET-00007..00011). Catatan penting: GET /api/rfid/incidents mengembalikan {count, incidents} (BUKAN items); last_cc Bandung sekarang CC00008 (accuracy 92.3), jangan hardcode CC00001. Navigasi: sidebar butuh nav-group-{penjualan|gudang} dulu, lalu nav-sales-orders → hub-tab-returns, atau nav-wms-operations → hub-tab-operations → wms-tab-health. Testid tab WMS: wms-tab-health (tidak ada wms-tab-stock; namanya lain).",
+  "rca_of_the_issue": "Tidak ditemukan bug fungsional pada ketiga fitur. Dua kegagalan awal pada suite saya adalah kesalahan ekspektasi tes (kunci respons 'incidents' dan nomor CC terbaru), sudah diperbaiki di file tes — bukan cacat aplikasi."
+}
