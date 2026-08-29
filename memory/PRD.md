@@ -979,3 +979,23 @@ diterapkan setelahnya (KNSelect + guard tombol), build OK.
 ### Backlog berikutnya
 - Dokumentasi API middleware Kotlin (API_MIDDLEWARE.md).
 - Opsional: filter entitas eksplisit pada daftar insiden bila kelak dibutuhkan.
+
+## 2026-08-29 — Preview Data Pesanan di Meja Admin Sales (permintaan user)
+KELUHAN: dialog Verifikasi hanya checklist tanpa data pesanannya → verifikasi buta.
+- Backend: `so_verify_service.order_preview(order)` — pelanggan, alamat kirim,
+  termin, tanggal, sales pembuat, items[] (+available_qty & stock_ok dari
+  inventory_balances entitas order), backorders[], totals (subtotal/PPN/grand).
+  Disertakan di GET /sales-orders/{id}/verification DAN
+  GET /sales-admin/orders/{id}/fulfillment (fds.options).
+- Frontend: `OrderPreviewCard.jsx` (baru, dipakai bersama); `VerifyOrderDialog`
+  jadi 2 kolom (kiri data, kanan checklist, maxWidth 1020);
+  `FulfillmentDecisionDialog` dapat preview collapsible (toggle) + lebar 860;
+  kedua dialog punya tombol "Buka Pesanan Lengkap" (openFull di SalesAdminDesk
+  → rowLink → openDocument).
+### Verifikasi
+iteration_268: backend 8/8 lulus (verify 409 utk order cacat tetap jalan),
+frontend 100% (preview, toggle, open-full, submit regresi). Catatan kosmetik:
+kolom kiri lebih pendek dari kanan pada order 1 baris (bukan blocker).
+### Backlog berikutnya
+- Siren sound utk alarm gate merah (P1) · Export PDF/Excel laporan shrinkage (P1)
+- E2E field testing WMS oleh user (P0)

@@ -166,6 +166,75 @@ def summarize(checks: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+async def order_preview(order: Dict[str, Any]) -> Dict[str, Any]:
+    """Ringkasan data pesanan untuk dialog verifikasi/pemenuhan.
+
+    Checklist tanpa datanya membuat Admin memverifikasi buta — ringkasan ini
+    menaruh pelanggan, alamat, termin, baris barang + kondisi stok, dan total
+    di samping daftar periksa.
+    """
+    items = order.get("items") or []
+    pids = list({it.get("product_id") for it in items if it.get("product_id")})
+    stok: Dict[str, float] = {}
+    if pids:
+        async for b in db.inventory_balances.find(
+                {"product_id": {"$in": pids},
+                 "owner_entity_id": order.get("entity_id") or ""},
+                {"_id": 0, "product_id": 1, "available_qty": 1}):
+            pid = b.get("product_id") or ""
+            stok[pid] = round(stok.get(pid, 0.0) + float(b.get("available_qty") or 0), 4)
+
+    rows = []
+    for it in items:
+        pid = it.get("product_id") or ""
+        qty = float(it.get("quantity") or 0)
+        avail = stok.get(pid, 0.0)
+        rows.append({
+            "product_id": pid,
+            "product_name": it.get("product_name") or "",
+            "sku": it.get("sku") or "",
+            "quantity": qty,
+            "unit": it.get("unit") or "",
+            "price": float(it.get("price") or 0),
+            "discount_percent": float(it.get("discount_percent") or 0),
+            "line_total": float(it.get("line_total") or it.get("subtotal") or 0),
+            "available_qty": avail,
+            "stock_ok": avail + 0.0001 >= qty,
+        })
+
+    backs = [{"product_name": b.get("product_name") or "", "sku": b.get("sku") or "",
+              "backorder_qty": float(b.get("backorder_qty") or 0), "unit": b.get("unit") or ""}
+             for b in (order.get("backorders") or [])
+             if float(b.get("backorder_qty") or 0) > 0]
+
+    addr = order.get("shipping_address") or {}
+    return {
+        "customer_name": order.get("customer_name") or "",
+        "customer_city": order.get("customer_city") or "",
+        "shipping_address": {
+            "recipient_name": addr.get("recipient_name") or "",
+            "phone": addr.get("phone") or "",
+            "address": addr.get("address") or "",
+            "city": addr.get("city") or "",
+        },
+        "payment_term": order.get("payment_term_name") or order.get("payment_term_code") or "",
+        "created_at": order.get("created_at") or "",
+        "sales_name": order.get("sales_name") or "",
+        "notes": order.get("notes") or "",
+        "status": order.get("status") or "",
+        "items": rows,
+        "backorders": backs,
+        "totals": {
+            "net_subtotal": float(order.get("net_subtotal") or order.get("total_amount") or 0),
+            "discount_total": float(order.get("discount_total") or 0),
+            "ppn_amount": float(order.get("ppn_amount") or 0),
+            "ppn_rate": float(order.get("ppn_rate") or 0),
+            "grand_total": float(order.get("grand_total") or 0),
+            "is_pkp": order.get("is_pkp") is not False,
+        },
+    }
+
+
 async def preview(order: Dict[str, Any]) -> Dict[str, Any]:
     """Pratinjau daftar periksa (read-only) — dipakai dialog sebelum menekan Verifikasi."""
     checks = await build_checklist(order)
@@ -174,6 +243,7 @@ async def preview(order: Dict[str, Any]) -> Dict[str, Any]:
         "status": order.get("status"),
         "verifiable": order.get("status") in VERIFIABLE_STATUSES,
         "verification": order.get("verification") or None,
+        "order_preview": await order_preview(order),
         "checks": checks, **summarize(checks),
     }
 

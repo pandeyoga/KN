@@ -1,25 +1,25 @@
 /**
  * VerifyOrderDialog — FASE E-8 (E8.13 · US17) · **VERIFIKASI ADMINISTRATIF**.
  *
- * Kenapa dialog ini ada, dan kenapa ia MENAMPILKAN daftar periksa sebelum tombolnya
- * bisa ditekan: dulu satu-satunya "pemeriksaan" pesanan adalah persetujuan NILAI milik
- * manajer, sehingga pemeriksaan rutin (alamat penerima kosong, syarat bayar belum
- * dipilih) ikut menunggu manajer — atau lebih sering: dilewati. Verifikasi administratif
- * adalah pekerjaan Admin Sales, dan pekerjaan itu butuh **daftar yang bisa dibaca**,
- * bukan tombol yang diam.
+ * Verifikasi bukan sekadar checklist: Admin harus MELIHAT data yang diperiksanya.
+ * Karena itu dialog ini dua kolom di layar besar — kiri DATA PESANAN (pelanggan,
+ * alamat, termin, baris barang + kondisi stok, total), kanan DAFTAR PERIKSA.
  *
  * Batas wewenang ditulis apa adanya: baris **kredit** ditandai TIDAK menghalangi —
  * penahanan kredit adalah keputusan manajer, bukan hasil verifikasi Anda.
  */
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, ClipboardCheck, Info, XCircle } from "lucide-react";
+import {
+  AlertTriangle, CheckCircle2, ClipboardCheck, ExternalLink, Info, XCircle,
+} from "lucide-react";
 import ErrorNotice from "../../components/ErrorNotice";
 import { apiErrorText } from "../../utils/apiError";
 import { useEscapeClose } from "../../utils/escapeLayers";
+import OrderPreviewCard from "./OrderPreviewCard";
 import { verificationPreview, verifyOrder } from "./workDeskApi";
 
 export default function VerifyOrderDialog({
-  orderId, orderNumber, customerName, onClose, onVerified,
+  orderId, orderNumber, customerName, onClose, onVerified, onOpenFull,
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -60,82 +60,101 @@ export default function VerifyOrderDialog({
     <div className="modal-overlay" data-testid="verify-dialog"
          onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}
-           style={{ maxWidth: 640 }}>
-        <div className="flex items-start gap-2">
-          <ClipboardCheck size={17} className="mt-0.5 text-[#0058CC]" />
-          <div className="min-w-0">
-            <p className="modal-title" data-testid="verify-dialog-title">
-              Verifikasi {orderNumber}
-            </p>
-            <p className="modal-subtitle">
-              {customerName} · periksa kelengkapan administratif. Ini <b>bukan</b>{" "}
-              persetujuan nilai/kredit — itu tetap wewenang manajer.
-            </p>
+           style={{ maxWidth: 1020, maxHeight: "90vh", overflowY: "auto" }}>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex min-w-0 items-start gap-2">
+            <ClipboardCheck size={17} className="mt-0.5 shrink-0 text-[#0058CC]" />
+            <div className="min-w-0">
+              <p className="modal-title" data-testid="verify-dialog-title">
+                Verifikasi {orderNumber}
+              </p>
+              <p className="modal-subtitle">
+                {customerName} · cocokkan data pesanan (kiri) dengan daftar periksa (kanan).
+                Ini <b>bukan</b> persetujuan nilai/kredit — itu tetap wewenang manajer.
+              </p>
+            </div>
           </div>
+          {onOpenFull && (
+            <button data-testid="verify-open-full" onClick={onOpenFull}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#CBDFFF] bg-[#F2F7FF] px-2.5 py-1 text-[10.5px] font-bold text-[#0058CC] hover:bg-[#EAF2FF]">
+              <ExternalLink size={11} /> Buka Pesanan Lengkap
+            </button>
+          )}
         </div>
 
         <ErrorNotice message={error} onDismiss={() => setError("")} testId="verify-error" />
 
         {loading ? (
           <div className="py-10 text-center text-[12px] text-[#6B6B73]" data-testid="verify-loading">
-            Memeriksa kelengkapan…
+            Memuat data pesanan & daftar periksa…
           </div>
         ) : (
-          <>
-            {sudah && (
-              <div data-testid="verify-already"
-                   className="mt-2 rounded-lg border border-[#BFE6CE] bg-[#E6F6EC] px-3 py-2">
-                <p className="text-[11.5px] font-bold text-[#1B7F4B]">
-                  Sudah diverifikasi oleh {data.verification.by}
-                  {data.verification.by_role ? ` (${data.verification.by_role})` : ""}
-                </p>
-                <p className="text-[10.5px] text-[#31624A]">
-                  {(data.verification.at || "").slice(0, 16).replace("T", " ")}
-                  {data.verification.note ? ` · ${data.verification.note}` : ""}
-                </p>
-              </div>
-            )}
+          <div className="mt-3 grid items-start gap-3 lg:grid-cols-[1.15fr_1fr]">
+            {/* ── KIRI: data pesanan yang sedang diperiksa ── */}
+            <OrderPreviewCard preview={data?.order_preview} testPrefix="verify-preview" />
 
-            {gaps.length > 0 && (
-              <div data-testid="verify-gaps"
-                   className="mt-2 rounded-lg border border-[#F5C9BC] bg-[#FDEDE7] px-3 py-2">
-                <p className="text-[11.5px] font-bold text-[#C0392B]">
-                  Belum bisa diverifikasi — lengkapi dulu:
-                </p>
-                <ul className="mt-0.5 list-disc pl-4 text-[11px] text-[#8C2E1F]">
-                  {gaps.map((g) => <li key={g}>{g}</li>)}
-                </ul>
-                <p className="mt-1 text-[10.5px] text-[#8C2E1F]">
-                  Perbaiki di layar Pesanan, lalu buka dialog ini lagi.
-                </p>
-              </div>
-            )}
+            {/* ── KANAN: hasil pemeriksaan ── */}
+            <div className="grid gap-2">
+              {sudah && (
+                <div data-testid="verify-already"
+                     className="rounded-lg border border-[#BFE6CE] bg-[#E6F6EC] px-3 py-2">
+                  <p className="text-[11.5px] font-bold text-[#1B7F4B]">
+                    Sudah diverifikasi oleh {data.verification.by}
+                    {data.verification.by_role ? ` (${data.verification.by_role})` : ""}
+                  </p>
+                  <p className="text-[10.5px] text-[#31624A]">
+                    {(data.verification.at || "").slice(0, 16).replace("T", " ")}
+                    {data.verification.note ? ` · ${data.verification.note}` : ""}
+                  </p>
+                </div>
+              )}
 
-            {gaps.length === 0 && warnings.length > 0 && (
-              <div data-testid="verify-warnings"
-                   className="mt-2 rounded-lg border border-[#F5D9A8] bg-[#FFF4E5] px-3 py-2">
-                <p className="text-[11.5px] font-bold text-[#8A5300]">
-                  Boleh diverifikasi, tapi catat ini: {warnings.join(" · ")}
-                </p>
-              </div>
-            )}
+              {gaps.length > 0 && (
+                <div data-testid="verify-gaps"
+                     className="rounded-lg border border-[#F5C9BC] bg-[#FDEDE7] px-3 py-2">
+                  <p className="text-[11.5px] font-bold text-[#C0392B]">
+                    Belum bisa diverifikasi — lengkapi dulu:
+                  </p>
+                  <ul className="mt-0.5 list-disc pl-4 text-[11px] text-[#8C2E1F]">
+                    {gaps.map((g) => <li key={g}>{g}</li>)}
+                  </ul>
+                  <p className="mt-1 text-[10.5px] text-[#8C2E1F]">
+                    Perbaiki lewat “Buka Pesanan Lengkap”, lalu buka dialog ini lagi.
+                  </p>
+                </div>
+              )}
 
-            <div className="mt-3 divide-y divide-[#F4F5F7] rounded-lg border border-[#EFF0F2]"
-                 data-testid="verify-checklist">
-              {checks.map((c) => <CheckRow key={c.id} check={c} />)}
-              {checks.length === 0 && (
-                <p className="px-3 py-6 text-center text-[11.5px] text-[#6B6B73]">
-                  Tidak ada daftar periksa untuk pesanan ini.
-                </p>
+              {gaps.length === 0 && warnings.length > 0 && (
+                <div data-testid="verify-warnings"
+                     className="rounded-lg border border-[#F5D9A8] bg-[#FFF4E5] px-3 py-2">
+                  <p className="text-[11.5px] font-bold text-[#8A5300]">
+                    Boleh diverifikasi, tapi catat ini: {warnings.join(" · ")}
+                  </p>
+                </div>
+              )}
+
+              <div className="divide-y divide-[#F4F5F7] rounded-lg border border-[#EFF0F2]"
+                   data-testid="verify-checklist">
+                <div className="bg-[#FAFBFC] px-3 py-1.5">
+                  <p className="text-[10.5px] font-bold uppercase tracking-wide text-[#6B6B73]">
+                    Daftar Periksa
+                  </p>
+                </div>
+                {checks.map((c) => <CheckRow key={c.id} check={c} />)}
+                {checks.length === 0 && (
+                  <p className="px-3 py-6 text-center text-[11.5px] text-[#6B6B73]">
+                    Tidak ada daftar periksa untuk pesanan ini.
+                  </p>
+                )}
+              </div>
+
+              {!sudah && (
+                <textarea data-testid="verify-note" className="field" rows={2}
+                  value={note} onChange={(e) => setNote(e.target.value)}
+                  placeholder="Catatan verifikasi (opsional) — mis. alamat dikonfirmasi lewat telepon" />
               )}
             </div>
-
-            {!sudah && (
-              <textarea data-testid="verify-note" className="field mt-3" rows={2}
-                value={note} onChange={(e) => setNote(e.target.value)}
-                placeholder="Catatan verifikasi (opsional) — mis. alamat dikonfirmasi lewat telepon" />
-            )}
-          </>
+          </div>
         )}
 
         <div className="modal-actions">

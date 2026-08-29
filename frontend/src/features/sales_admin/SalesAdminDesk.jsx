@@ -61,6 +61,11 @@ export default function SalesAdminDesk({ currentUser, selectedEntity = "all", on
     } finally { setBusyRef(""); }
   }
 
+  function openFull(row) {
+    setVerifyRow(null); setFulfillRow(null);
+    onOpenDocument?.(rowLink(row, null, "sales_admin"));
+  }
+
   function handleAction(row, queue) {
     if (row.action_kind === "verify") { setVerifyRow(row); return; }
     if (row.action_kind === "fulfill") { setFulfillRow(row); return; }
@@ -156,6 +161,7 @@ export default function SalesAdminDesk({ currentUser, selectedEntity = "all", on
           customerName={verifyRow.title}
           onClose={() => setVerifyRow(null)}
           onVerified={(msg) => { setVerifyRow(null); flash(msg); load(); }}
+          onOpenFull={() => openFull(verifyRow)}
         />
       )}
 
@@ -166,6 +172,7 @@ export default function SalesAdminDesk({ currentUser, selectedEntity = "all", on
           customerName={fulfillRow.title}
           onClose={() => setFulfillRow(null)}
           onDecided={(msg) => { setFulfillRow(null); flash(msg); load(); }}
+          onOpenFull={() => openFull(fulfillRow)}
         />
       )}
     </div>

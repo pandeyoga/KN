@@ -1,0 +1,25 @@
+{
+  "summary": "Iterasi 268 — uji fitur 'order_preview' di dialog Verifikasi & Pemenuhan Meja Admin Sales. Backend: 8 test pytest baru (100% lulus, 1 skip karena tidak ada order cacat alami di antrean — diganti test order cacat sintetis). Frontend: alur login salesadmin → Meja Admin Sales → dialog Verifikasi (preview 2 kolom + checklist + grand total Rp 2.997.000 SO-0008), tombol 'Buka Pesanan Lengkap', dialog Pemenuhan SO-0009 (preview collapsible + shortages + 3 mode), serta regresi submit verifikasi. Semua lulus; tidak ditemukan bug fungsional.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "VerifyOrderDialog (SO-0008)", "issues": ["Kolom kiri (OrderPreviewCard) jauh lebih pendek dari kolom kanan pada pesanan 1 baris → ruang putih besar di bawah kartu preview (kosmetik, bukan blocker)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_iter268_order_preview.py", "/app/test_reports/pytest/iter268.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "so_verify_service.order_preview() menjumlahkan inventory_balances per product_id tanpa filter gudang/bucket — angka 'available_qty' di preview bisa lebih optimistis daripada alokasi nyata; cukup untuk indikator, tapi pastikan definisinya sama dengan yang dipakai wizard pemenuhan agar tidak memberi dua angka berbeda ke petugas yang sama.",
+    "Verifikasi hanya membaca satu dokumen order lalu memanggil order_preview; kalau order punya banyak baris, query inventory_balances $in tetap satu kali — baik. Tidak ada N+1."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter268_order_preview.py"],
+  "success_rate": {"backend": "100% (8/8 lulus, 1 skip)", "frontend": "100% (semua testid preview/checklist/toggle/open-full/submit terverifikasi)"},
+  "seed_data_creation": "Order cacat sintetis 't1_iter268_defect' dibuat & dihapus dalam test (409 check). Order yang diverifikasi selama uji (so_006, so_008, SO-0009) SUDAH DIPULIHKAN (field verification di-unset, status_history stage verified_by_sales_admin dibuang) sehingga antrean 'Perlu diverifikasi' kembali 3 baris seperti data demo.",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "test_credentials": "salesadmin@kainnusantara.id / demo12345 (entitas ent_ksc via scope-pick-ent_ksc)",
+  "context_for_next_testing_agent": "Detail yang terbukti: (1) endpoint desk adalah GET /api/sales-admin/desk (BUKAN /api/work-desks/...); (2) order_preview identik antara /api/sales-orders/{id}/verification dan /api/sales-admin/orders/{id}/fulfillment; (3) testid preview memakai prefix 'verify-preview-*' dan 'fulfill-preview-*' (contoh: verify-preview-customer, fulfill-preview-toggle, verify-preview-grand-total); (4) desk-action-{ref_id} TIDAK unik — satu order bisa muncul di beberapa antrean (so_008 di 'perlu_verifikasi' dan 'jatuh_tempo'), jadi scope-kan dengan get_by_test_id('desk-queue-perlu_verifikasi'); (5) mode fulfill 'interco' SENGAJA disabled bila tak ada entitas grup berstok ('Belum bisa') — bukan tombol rusak; (6) SO-0009 murni backorder → items[] kosong, backorders[] terisi, grand_total Rp 0 (benar); (7) jika menjalankan test verify, pulihkan field verification agar antrean demo tidak habis.",
+  "rca_of_the_issue": "Keluhan asli (checklist tanpa data pesanan) sudah tertutup: order_preview terkirim dari server dan dirender OrderPreviewCard di kedua dialog; verifikasi visual menunjukkan pelanggan/penerima/alamat/termin/tanggal/sales, tabel barang dengan badge stok ('cukup'), total Rp 2.997.000, dan checklist 6 baris di kolom kanan."
+}

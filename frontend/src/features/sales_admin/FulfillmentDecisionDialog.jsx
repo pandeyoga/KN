@@ -11,11 +11,13 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeftRight, Building2, CheckCircle2, Clock3, PackageSearch, ShoppingCart, XCircle,
+  ArrowLeftRight, Building2, CheckCircle2, ChevronDown, ChevronUp, Clock3,
+  ExternalLink, PackageSearch, ShoppingCart, XCircle,
 } from "lucide-react";
 import ErrorNotice from "../../components/ErrorNotice";
 import { formatQty } from "../../utils/formatters";
 import { apiErrorText } from "../../utils/apiError";
+import OrderPreviewCard from "./OrderPreviewCard";
 import { fulfillmentDecision, fulfillmentOptions } from "./workDeskApi";
 
 const MODE_META = {
@@ -34,7 +36,7 @@ const MODE_META = {
 };
 
 export default function FulfillmentDecisionDialog({
-  orderId, orderNumber, customerName, onClose, onDecided,
+  orderId, orderNumber, customerName, onClose, onDecided, onOpenFull,
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +45,7 @@ export default function FulfillmentDecisionDialog({
   const [source, setSource] = useState("");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -96,18 +99,26 @@ export default function FulfillmentDecisionDialog({
     <div className="modal-overlay" data-testid="fulfill-dialog"
          onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}
-           style={{ maxWidth: 760, maxHeight: "88vh", overflowY: "auto" }}>
-        <div className="flex items-start gap-2">
-          <PackageSearch size={17} className="mt-0.5 text-[#B23B14]" />
-          <div className="min-w-0">
-            <p className="modal-title" data-testid="fulfill-dialog-title">
-              Keputusan pemenuhan {orderNumber}
-            </p>
-            <p className="modal-subtitle">
-              {customerName} · wewenang Anda — tanpa menunggu manajer, kecuali nilainya
-              melewati ambang yang dipasang pemilik di Pusat Pengaturan.
-            </p>
+           style={{ maxWidth: 860, maxHeight: "90vh", overflowY: "auto" }}>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex min-w-0 items-start gap-2">
+            <PackageSearch size={17} className="mt-0.5 shrink-0 text-[#B23B14]" />
+            <div className="min-w-0">
+              <p className="modal-title" data-testid="fulfill-dialog-title">
+                Keputusan pemenuhan {orderNumber}
+              </p>
+              <p className="modal-subtitle">
+                {customerName} · wewenang Anda — tanpa menunggu manajer, kecuali nilainya
+                melewati ambang yang dipasang pemilik di Pusat Pengaturan.
+              </p>
+            </div>
           </div>
+          {onOpenFull && (
+            <button data-testid="fulfill-open-full" onClick={onOpenFull}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[#CBDFFF] bg-[#F2F7FF] px-2.5 py-1 text-[10.5px] font-bold text-[#0058CC] hover:bg-[#EAF2FF]">
+              <ExternalLink size={11} /> Buka Pesanan Lengkap
+            </button>
+          )}
         </div>
 
         <ErrorNotice message={error} onDismiss={() => setError("")} testId="fulfill-error" />
@@ -127,6 +138,21 @@ export default function FulfillmentDecisionDialog({
                 <p className="text-[10.5px] text-[#31465F]">
                   oleh {already.by || "—"} · memutuskan ulang akan menambah jejak baru.
                 </p>
+              </div>
+            )}
+
+            {/* Data pesanan yang sedang diputuskan — bisa dilipat bila dialog terasa panjang */}
+            {data?.order_preview && (
+              <div className="mt-3">
+                <button data-testid="fulfill-preview-toggle"
+                        onClick={() => setShowPreview((v) => !v)}
+                        className="mb-1 inline-flex items-center gap-1 text-[10.5px] font-bold uppercase tracking-wide text-[#6B6B73] hover:text-[#0058CC]">
+                  {showPreview ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  {showPreview ? "Sembunyikan data pesanan" : "Lihat data pesanan"}
+                </button>
+                {showPreview && (
+                  <OrderPreviewCard preview={data.order_preview} testPrefix="fulfill-preview" />
+                )}
               </div>
             )}
 

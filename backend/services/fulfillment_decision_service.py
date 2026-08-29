@@ -82,10 +82,13 @@ async def options(order: Dict[str, Any]) -> Dict[str, Any]:
     incoming = round(sum(float(b.get("incoming_total") or 0) for b in kurang), 4)
     promise = next((b.get("promise_date") for b in kurang if b.get("promise_date")), "")
 
+    from services import so_verify_service
+
     return {
         "order_id": order["id"], "order_number": order.get("number"),
         "customer_name": order.get("customer_name"),
         "entity_id": buyer,
+        "order_preview": await so_verify_service.order_preview(order),
         "shortages": kurang,
         "decision": order.get("fulfillment_decision") or None,
         "options": {
