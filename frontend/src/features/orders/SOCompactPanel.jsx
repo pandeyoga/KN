@@ -5,9 +5,10 @@
  * (pop-up berisi `OrderDetailPanel` yang sama — satu sumber tampilan & aksi).
  */
 import { useState } from "react";
-import { Check, Maximize2, Wand2, XCircle } from "lucide-react";
+import { Maximize2, Wand2, XCircle } from "lucide-react";
 import { formatCurrency } from "../../utils/formatters";
 import { StagePill, SubStatusChips } from "../../components/SoStatusBadges";
+import PaymentBadge from "../../components/PaymentBadge";
 import EntityBadge from "../../components/EntityBadge";
 import FulfillmentWizard from "./FulfillmentWizard";
 
@@ -17,7 +18,6 @@ export default function SOCompactPanel({ order, onClose, onOpenFull }) {
   const its = order.items || [];
   const qty = its.reduce((s, it) => s + Number(it.qty ?? it.quantity ?? 0), 0);
   const units = [...new Set(its.map((it) => it.unit).filter(Boolean))];
-  const paid = order.payment_status === "paid";
 
   return (
     <div className="section-card self-start" data-testid="so-compact-panel">
@@ -55,15 +55,20 @@ export default function SOCompactPanel({ order, onClose, onOpenFull }) {
           </span>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
-          <span className={`inline-flex items-center gap-1 font-semibold ${paid ? "text-green-600" : "text-[#B26A00]"}`}
-            data-testid="so-compact-payment">
-            {paid ? <><Check size={12} /> Lunas</> : "Belum bayar"}
-            {order.payment_terms ? <span className="font-normal text-[#6B6B73]"> · {order.payment_terms}</span> : null}
+          <span className="inline-flex items-center gap-1">
+            <PaymentBadge order={order} showRemaining testId="so-compact-payment" />
+            {order.payment_terms ? <span className="text-[#6B6B73]">· {order.payment_terms}</span> : null}
           </span>
           <span className="text-[#6B6B73]">
             {order.created_at ? new Date(order.created_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) : ""}
           </span>
         </div>
+        {order.payment_status === "partial" && (
+          <p data-testid="so-compact-paid-detail" className="text-[10.5px] text-[#6B6B73]">
+            Sudah dibayar <span className="font-semibold text-[#1B7F4B]">{formatCurrency(order.paid_total)}</span>
+            {" "}dari {formatCurrency(order.grand_total != null ? order.grand_total : order.total_amount)}
+          </p>
+        )}
         {order.has_backorder && (
           <p className="rounded-md border border-[#F6D3C4] bg-[#FFF1EA] px-2.5 py-1.5 text-[11px] font-semibold text-[#B23B14]">
             Ada backorder — sebagian qty menunggu stok.

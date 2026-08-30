@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart2, FileText, Search, XCircle, Check, Route } from "lucide-react";
+import { BarChart2, FileText, Search, XCircle, Route } from "lucide-react";
 import axios, { API } from "../../services/apiClient";
 import { formatCurrency } from "../../utils/formatters";
+import PaymentBadge from "../../components/PaymentBadge";
 import PaginationBar from "../../components/PaginationBar";
 import { usePagedList } from "../../hooks/usePagedList";
 
@@ -139,7 +140,7 @@ export default function OrdersView({
     confirmed: sCnt("confirmed", "partially_picked", "picked"),
     shipped: sCnt("partially_shipped", "shipped", "dispatched"),
     done: sCnt("done"),
-    cancelled: sCnt("cancelled"),
+    cancelled: sCnt("cancelled", "expired"),
   };
 
   return (
@@ -185,7 +186,7 @@ export default function OrdersView({
               { label: "Diproses", value: stats.confirmed, color: "text-[#34C759]", bg: "bg-green-50", st: "confirmed,partially_picked,picked", keys: ["confirmed", "partially_picked", "picked"] },
               { label: "Dikirim", value: stats.shipped, color: "text-[#0058CC]", bg: "bg-[#EAF2FF]", st: "partially_shipped,shipped,dispatched", keys: ["partially_shipped", "shipped", "dispatched"] },
               { label: "Selesai", value: stats.done, color: "text-[#5856D6]", bg: "bg-purple-50", st: "done", keys: ["done"] },
-              { label: "Dibatalkan", value: stats.cancelled, color: "text-red-500", bg: "bg-red-50", st: "cancelled", keys: ["cancelled"] },
+              { label: "Dibatalkan", value: stats.cancelled, color: "text-red-500", bg: "bg-red-50", st: "cancelled,expired", keys: ["cancelled", "expired"] },
             ].map(({ label, value, color, bg, st, keys }) => {
               const amt = keys.length === 0
                 ? Object.values(byStatus).reduce((s, v) => s + Number(v?.total_amount || 0), 0)
@@ -254,7 +255,7 @@ export default function OrdersView({
                     { value: "shipped", label: "Shipped" },
                     { value: "dispatched", label: "Terkirim (lama)" },
                     { value: "done", label: "Selesai (Terkirim)" },
-                    { value: "cancelled", label: "Dibatalkan" },
+                    { value: "cancelled,expired", label: "Dibatalkan / Kedaluwarsa" },
                   ]}
                 />
               </div>
@@ -305,7 +306,8 @@ export default function OrdersView({
                           )}
                         </div>
                         <p className="text-[10.5px] text-[#6B6B73] truncate">
-                          {(order.items || []).length} item · {order.payment_status === 'paid' ? <span className="inline-flex items-center gap-0.5 text-green-600"><Check size={11} /> Lunas</span> : 'Belum bayar'}
+                          {(order.items || []).length} item ·{" "}
+                          <PaymentBadge order={order} showRemaining testId={`order-payment-${order.id}`} />
                         </p>
                       </div>
                       <p data-testid={`order-customer-${order.id}`} className="text-[11px] text-[#3C3C43] truncate">

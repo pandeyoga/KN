@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { XCircle, Clock3, Truck, CreditCard, PackageX, ShieldAlert, Send, FileText, AlertTriangle, PackageCheck } from "lucide-react";
+import { XCircle, Clock3, Truck, CreditCard, PackageX, ShieldAlert, Send, FileText, AlertTriangle, PackageCheck, ClipboardCheck, PackageSearch } from "lucide-react";
 import { can } from "../../config/roles";
 import { formatCurrency, formatQty } from "../../utils/formatters";
-import { StatusPill } from "../../components/CoreWidgets";
 import { StagePill, StageTimeline } from "../../components/SoStatusBadges";
+import PaymentBadge from "../../components/PaymentBadge";
 import QtyDual from "../../components/QtyDual";      // FASE U — dua satuan
 import axios, { API } from "../../services/apiClient";
 import ProcessTimeline from "../documents/ProcessTimeline";
@@ -113,7 +113,7 @@ export function OrderDetailPanel({
           <p className="text-[10px] font-bold uppercase tracking-wide text-[#0058CC]">{sel.number}</p>
           <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             <StagePill order={sel} testId="order-stage-pill" />
-            <StatusPill status={sel.payment_status} />
+            <PaymentBadge order={sel} showRemaining testId="order-payment-pill" />
             {sel.has_backorder && (
               <span data-testid="order-backorder-chip" className="rounded bg-[#FFF1EA] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#B23B14]">
                 Backorder
@@ -160,6 +160,42 @@ export function OrderDetailPanel({
             </p>
           )}
         </div>
+
+        {/* E8.13 — hasil VERIFIKASI ADMINISTRATIF harus terbaca di detail pesanan,
+            bukan hanya di Meja Admin Sales: siapa memeriksa kelengkapan, kapan. */}
+        {sel.verification?.status === "verified" ? (
+          <div data-testid="order-verification-badge"
+               className="flex items-start gap-2 rounded-md border border-[#BFE6CE] bg-[#E6F6EC] px-2.5 py-1.5 text-[11px] text-[#1B7F4B]">
+            <ClipboardCheck size={13} className="mt-0.5 shrink-0" />
+            <span>
+              <b>Terverifikasi Admin Sales</b> — {sel.verification.by}
+              {sel.verification.by_role ? ` (${sel.verification.by_role})` : ""}
+              {" · "}{(sel.verification.at || "").slice(0, 16).replace("T", " ")}
+              {sel.verification.note ? ` · “${sel.verification.note}”` : ""}
+            </span>
+          </div>
+        ) : ["draft", "reserved", "waiting_stock", "waiting_approval", "approved"].includes(sel.status) ? (
+          <div data-testid="order-verification-pending"
+               className="flex items-center gap-2 rounded-md border border-[#E2E2E7] bg-[#FAFBFC] px-2.5 py-1.5 text-[10.5px] text-[#6E6E73]">
+            <ClipboardCheck size={12} className="shrink-0" />
+            Belum diverifikasi Admin Sales (kelengkapan alamat · termin · isi) — dilakukan lewat Meja Admin Sales.
+          </div>
+        ) : null}
+
+        {/* E8.10b#4 — keputusan pemenuhan (interco/reorder/tahan) menempel pada
+            pesanannya; tanpa baris ini keputusan hanya terlihat di Meja Admin Sales. */}
+        {sel.fulfillment_decision && (
+          <div data-testid="order-fulfillment-decision"
+               className="flex items-start gap-2 rounded-md border border-[#CBDFFF] bg-[#F2F7FF] px-2.5 py-1.5 text-[11px] text-[#31465F]">
+            <PackageSearch size={13} className="mt-0.5 shrink-0 text-[#0058CC]" />
+            <span>
+              <b className="text-[#0058CC]">Keputusan pemenuhan:</b> {sel.fulfillment_decision.summary}
+              {" — "}oleh {sel.fulfillment_decision.by || "—"}
+              {sel.fulfillment_decision.ref_number ? ` · ref ${sel.fulfillment_decision.ref_number}` : ""}
+              {sel.fulfillment_decision.note ? ` · “${sel.fulfillment_decision.note}”` : ""}
+            </span>
+          </div>
+        )}
 
         {/* Sub-fase 1.6 — banner backorder (waiting_stock) */}
         {sel.has_backorder && (sel.backorders || []).length > 0 && (

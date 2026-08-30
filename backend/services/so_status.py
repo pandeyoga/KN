@@ -60,6 +60,10 @@ def derive_stage_substatus(order: Dict[str, Any]) -> Tuple[str, List[str]]:
         return STAGE_DELIVERED, []
     if status == "shipped":
         return STAGE_SHIPPED, []
+    if status == "dispatched":
+        # Status warisan pra-F4 — dokumen lama yang memakainya sudah DIKIRIM;
+        # tanpa pemetaan ini ia jatuh ke fallback Reserved dan pill-nya berbohong.
+        return STAGE_SHIPPED, []
     if status == "partially_shipped":
         return STAGE_SHIPPED, ["sebagian_dikirim"]
     if status == "picked":

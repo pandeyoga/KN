@@ -999,3 +999,28 @@ kolom kiri lebih pendek dari kanan pada order 1 baris (bukan blocker).
 ### Backlog berikutnya
 - Siren sound utk alarm gate merah (P1) · Export PDF/Excel laporan shrinkage (P1)
 - E2E field testing WMS oleh user (P0)
+
+## 2026-08-30 — Audit & Perbaikan Status di Manajemen Pesanan (permintaan user)
+AUDIT: stage/sub_status server 100% konsisten (11 SO, 0 mismatch vs SSOT so_status.py).
+Masalah yang ditemukan & diperbaiki (semua di sisi TAMPILAN):
+1. `partial` tampil "Belum bayar" → komponen baru `PaymentBadge.jsx` (Lunas /
+   Bayar Sebagian + sisa / Belum bayar) dipakai seragam di daftar (OrdersView),
+   panel ringkas (SOCompactPanel + baris "Sudah dibayar X dari Y"), dan header
+   detail (OrderDetailPanel, menggantikan StatusPill mentah "partial").
+2. Verifikasi Admin Sales kini tampil di detail SO: badge hijau
+   `order-verification-badge` (siapa/kapan/catatan) atau abu-abu
+   `order-verification-pending` utk status pra-konfirmasi.
+3. Keputusan pemenuhan (`fulfillment_decision`) tampil di detail SO
+   (`order-fulfillment-decision`: summary + by + ref_number + note).
+4. Status legacy `dispatched` dipetakan → stage Shipped di BE (so_status.py)
+   dan FE (soStatus.js) — dulu jatuh ke fallback Reserved.
+5. Kartu pipeline "Dibatalkan" + dropdown kini mencakup `expired`
+   (cancelled,expired) — dulu kartu bilang 0 padahal daftar berisi pill
+   "Dibatalkan (Kedaluwarsa)".
+CATATAN: SO-0006 & SO-0008 kedaluwarsa ALAMI (reservation_expires_at lewat) —
+antrean "Perlu diverifikasi" demo bisa kosong karena ini, bukan bug.
+### Verifikasi
+Self-test screenshot end-to-end: badge bayar 3 tempat (SO-0001 partial → "Bayar
+Sebagian · sisa Rp 5.571.200"), blok verifikasi+keputusan (data uji di so_008,
+sudah dipulihkan), kartu Dibatalkan=2 & filter cocok, derive dispatched→Shipped
+diuji via python.

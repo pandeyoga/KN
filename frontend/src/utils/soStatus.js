@@ -81,7 +81,8 @@ export function deriveStageSub(order) {
     case "expired": return ["Cancelled", ["kedaluwarsa"]];
     case "done":
     case "delivered": return ["Delivered", []];
-    case "shipped": return ["Shipped", []];
+    case "shipped":
+    case "dispatched": return ["Shipped", []];
     case "partially_shipped": return ["Shipped", ["sebagian_dikirim"]];
     case "picked": return ["Picked", ["siap_kirim"]];
     case "partially_picked": return ["Picked", ["sebagian_dipick"]];
