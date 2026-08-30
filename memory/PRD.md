@@ -1024,3 +1024,21 @@ Self-test screenshot end-to-end: badge bayar 3 tempat (SO-0001 partial → "Baya
 Sebagian · sisa Rp 5.571.200"), blok verifikasi+keputusan (data uji di so_008,
 sudah dipulihkan), kartu Dibatalkan=2 & filter cocok, derive dispatched→Shipped
 diuji via python.
+
+## 2026-08-30 — Audit & Perbaikan Status Pembelian/MD (permintaan user)
+AUDIT: PR/RFQ/Papan PO sehat; mesin status PO benar; 5 temuan diperbaiki:
+1. Label `pending` "Menunggu" (ambigu) → **"Menunggu Barang"**; `partial`
+   "Partial" (Inggris) → **"Terima Sebagian"**; `closed_short` → "Ditutup-Kurang"
+   (poUtils.jsx).
+2. `billingState(po)` baru di poUtils — badge penagihan (Belum Ditagih /
+   Tertagih Sebagian / Tertagih Penuh) kini tampil di BARIS daftar PO
+   (testid `po-row-billing-{id}`), kolom status dilebarkan 70→110px.
+3. Baris "terima 0 (0%)" disembunyikan utk PO waiting_approval/rejected/cancelled.
+4. DATA: PO-00003 dikoreksi `completed` → `closed_short` + close_reason +
+   timeline entry (terima 280/300, di bawah toleransi 2%). Persetujuan user.
+5. DATA: backfill payment_status utk KSC/PO-00011 & KSC/PO-00012 (dulu None)
+   via recompute_po_payment_status.
+BONUS: fix lint blocking Makloon360Panel.jsx (processLabel undefined di RecipeList).
+### Verifikasi
+Self-test screenshot daftar PO: Menunggu Barang×7, Ditutup-Kurang×1, badge
+penagihan×8, PO-00011 (menunggu persetujuan) tanpa baris "terima".

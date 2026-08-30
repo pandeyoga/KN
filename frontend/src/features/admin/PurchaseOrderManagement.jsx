@@ -3,7 +3,7 @@ import { Plus, Package, ChevronDown, Boxes, ShoppingBag, GitBranch, Search } fro
 import axios, { API } from "../../services/apiClient";
 import { parseDecimal } from "../../utils/decimalInput";
 import { formatCurrency } from "../../utils/formatters";
-import { getStatusBadge } from "./po/poUtils";
+import { getStatusBadge, billingState } from "./po/poUtils";
 import POCreateForm from "./po/POCreateForm";
 import PODetailPanel from "./po/PODetailPanel";
 import POCompactPanel from "./po/POCompactPanel";
@@ -350,7 +350,7 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
         {/* PO Table */}
         <div className="section-card">
           <div className="overflow-hidden">
-            <div className="grid grid-cols-[70px_1fr_110px_130px_105px_78px_70px] gap-2 px-3 py-1.5 bg-[#FAFBFC] text-[10px] font-bold uppercase text-[#6B6B73] border-b border-[#EFF0F2]">
+            <div className="grid grid-cols-[70px_1fr_105px_125px_105px_78px_110px] gap-2 px-3 py-1.5 bg-[#FAFBFC] text-[10px] font-bold uppercase text-[#6B6B73] border-b border-[#EFF0F2]">
               <span>Nomor</span><span>Supplier</span><span>Gudang</span><span>Qty Pesan / Terima</span><span className="text-right">Total</span><span>Tanggal</span><span>Status</span>
             </div>
             {loading ? (
@@ -370,9 +370,13 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
                   const qRecv = items.reduce((s, it) => s + Number(it.received_qty || 0), 0);
                   const units = [...new Set(items.map((it) => it.unit).filter(Boolean))];
                   const unit = units.length === 1 ? units[0] : "";
+                  // b/d — badge penagihan di baris + sembunyikan "terima 0" bila barang
+                  // memang belum mungkin diterima (belum disetujui / ditolak / batal).
+                  const bill = billingState(po);
+                  const showReceive = !["waiting_approval", "rejected", "cancelled"].includes(po.status);
                   return (
                   <div key={po.id} data-testid={`po-card-${po.id}`}
-                    className={`grid grid-cols-[70px_1fr_110px_130px_105px_78px_70px] gap-2 items-center px-3 py-2.5 cursor-pointer hover:bg-[#FAFBFC] transition-colors ${selectedPO?.id === po.id ? "bg-[#EFF4FF] border-l-2 border-[#007AFF]" : ""}`}
+                    className={`grid grid-cols-[70px_1fr_105px_125px_105px_78px_110px] gap-2 items-center px-3 py-2.5 cursor-pointer hover:bg-[#FAFBFC] transition-colors ${selectedPO?.id === po.id ? "bg-[#EFF4FF] border-l-2 border-[#007AFF]" : ""}`}
                     onClick={() => handleViewDetail(po.id)}>
                     <p data-testid={`po-number-${po.id}`} className="text-[12px] font-bold text-[#007AFF]">{po.po_number}</p>
                     <div className="min-w-0">
@@ -382,13 +386,21 @@ export default function PurchaseOrderManagement({ user, selectedEntity, onApprov
                     <p className="text-[11px] text-[#3C3C43] truncate">{po.warehouse_name}</p>
                     <div className="text-[11px] tabular-nums" data-testid={`po-qty-${po.id}`}>
                       <p className="font-semibold">{new Intl.NumberFormat("id-ID").format(qOrder)} {unit}</p>
-                      <p className={`text-[10px] ${qRecv >= qOrder && qOrder > 0 ? "text-green-600" : "text-[#6B6B73]"}`}>
-                        terima {new Intl.NumberFormat("id-ID").format(qRecv)}{qOrder > 0 ? ` (${Math.round((qRecv / qOrder) * 100)}%)` : ""}
-                      </p>
+                      {showReceive && (
+                        <p className={`text-[10px] ${qRecv >= qOrder && qOrder > 0 ? "text-green-600" : "text-[#6B6B73]"}`}>
+                          terima {new Intl.NumberFormat("id-ID").format(qRecv)}{qOrder > 0 ? ` (${Math.round((qRecv / qOrder) * 100)}%)` : ""}
+                        </p>
+                      )}
                     </div>
                     <p className="text-right text-[11.5px] font-bold tabular-nums" data-testid={`po-total-${po.id}`}>{formatCurrency(po.grand_total ?? po.total_amount)}</p>
                     <p className="text-[10.5px] text-[#6B6B73]">{po.created_at ? new Date(po.created_at).toLocaleDateString("id-ID", { day: "2-digit", month: "short" }) : "—"}</p>
-                    {getStatusBadge(po.status)}
+                    <div className="flex flex-col items-start gap-0.5 min-w-0">
+                      {getStatusBadge(po.status)}
+                      {bill && (
+                        <span data-testid={`po-row-billing-${po.id}`}
+                          className={`rounded px-1.5 py-0.5 text-[9.5px] font-semibold ${bill.cls}`}>{bill.label}</span>
+                      )}
+                    </div>
                   </div>
                   );
                 })}

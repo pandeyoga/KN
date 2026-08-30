@@ -204,6 +204,7 @@ export default function Makloon360Panel({ makloonId, currentUser, onBack, onEdit
 }
 
 function RecipeList({ rows }) {
+  const { labelOf: processLabel } = useProcessTypes();
   if (!rows.length) return <div className="py-8 text-center text-[11.5px] text-[#9A9BA3]" data-testid="makloon-360-empty-recipes">Belum ada resep memakai makloon ini.</div>;
   return (
     <div className="divide-y divide-[#EFF0F2] max-h-[460px] overflow-y-auto" data-testid="makloon-360-list-recipes">
